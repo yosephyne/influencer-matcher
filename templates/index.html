@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Influencer Product Matcher | GMF</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎯 Influencer Product Matcher</h1>
+            <p class="subtitle">Verify and optimize product assignments based on collaboration history</p>
+        </header>
+
+        <!-- Stats Bar -->
+        <div id="stats" class="stats-bar" style="display: none;">
+            <div class="stat-item">
+                <span class="stat-label">Contacts</span>
+                <span class="stat-value" id="stat-contacts">0</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Products</span>
+                <span class="stat-value" id="stat-products">0</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Status</span>
+                <span class="stat-value status-ready">Ready</span>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="content">
+            
+            <!-- Step 1: Upload Data -->
+            <section class="card">
+                <h2>📂 Step 1: Load Collaboration Data</h2>
+                <p>Upload CSV/Excel files containing past influencer collaborations</p>
+                
+                <div class="upload-zone" id="dropzone">
+                    <input type="file" id="fileInput" multiple accept=".csv,.xlsx,.xls" style="display: none;">
+                    <div class="upload-icon">📁</div>
+                    <p>Drag & drop files here or click to browse</p>
+                    <button class="btn btn-secondary" onclick="document.getElementById('fileInput').click()">
+                        Choose Files
+                    </button>
+                </div>
+                
+                <div id="uploadStatus" class="status-message" style="display: none;"></div>
+            </section>
+
+            <!-- Step 2: Search Individual -->
+            <section class="card">
+                <h2>🔍 Step 2: Search Influencer</h2>
+                <p>Find an influencer's collaboration history</p>
+                
+                <div class="search-box">
+                    <input type="text" id="searchInput" placeholder="Enter influencer name..." class="input-field">
+                    <button class="btn btn-primary" onclick="searchInfluencer()">Search</button>
+                </div>
+                
+                <div id="searchResults" class="results-box" style="display: none;"></div>
+            </section>
+
+            <!-- Step 3: Verify Assignments -->
+            <section class="card">
+                <h2>✓ Step 3: Verify Product Assignments</h2>
+                
+                <div class="tabs">
+                    <button class="tab-btn active" onclick="switchTab('single')">Single Check</button>
+                    <button class="tab-btn" onclick="switchTab('batch')">Batch Verify</button>
+                </div>
+                
+                <!-- Single Verification -->
+                <div id="tab-single" class="tab-content">
+                    <div class="form-group">
+                        <label>Influencer Name</label>
+                        <input type="text" id="verifySingleName" class="input-field" placeholder="e.g., Laura Malina Seiler">
+                    </div>
+                    <div class="form-group">
+                        <label>Assigned Product</label>
+                        <input type="text" id="verifySingleProduct" class="input-field" placeholder="e.g., Rohkakao Peru">
+                    </div>
+                    <button class="btn btn-primary" onclick="verifySingle()">Verify Assignment</button>
+                    
+                    <div id="verifySingleResult" class="result-card" style="display: none;"></div>
+                </div>
+                
+                <!-- Batch Verification -->
+                <div id="tab-batch" class="tab-content" style="display: none;">
+                    <p>Upload an Excel/CSV file with columns: Name, Product</p>
+                    
+                    <input type="file" id="batchFile" accept=".csv,.xlsx,.xls" class="input-field">
+                    <button class="btn btn-primary" onclick="verifyBatch()">Verify All</button>
+                    
+                    <div id="batchResults" style="display: none;">
+                        <div class="batch-stats"></div>
+                        <div class="batch-table-container">
+                            <table id="resultsTable" class="results-table">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>Assigned</th>
+                                        <th>Status</th>
+                                        <th>Historical Products</th>
+                                        <th>Score</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                        <button class="btn btn-secondary" onclick="exportResults()">📥 Export Results</button>
+                    </div>
+                </div>
+            </section>
+
+        </div>
+
+        <footer>
+            <p>Built for goodmoodfood • Run locally on your machine</p>
+        </footer>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

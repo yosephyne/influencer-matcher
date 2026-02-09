@@ -1,0 +1,18 @@
+# Core web framework
+flask==3.0.0
+werkzeug==3.0.1
+
+# Data processing
+pandas==2.1.4
+openpyxl==3.1.2
+python-docx==1.1.0
+
+# Text matching and fuzzy search
+thefuzz==0.20.0
+python-Levenshtein==0.23.0
+
+# Email handling (optional, for future SMTP integration)
+# sendgrid==6.11.0
+
+# For web interface styling
+flask-cors==4.0.0
