@@ -212,7 +212,7 @@ if __name__ == '__main__':
     print("\n" + "="*60)
     print("🚀 Influencer Matcher starting...")
     print("="*60)
-    print("\n📱 Open in browser: http://localhost:5000")
+    print("\n📱 Open in browser: http://localhost:5001")
     print("\n⚠️  Press CTRL+C to stop the server\n")
-    
-    app.run(host='0.0.0.0', port=5000, debug=True)
+
+    app.run(host='0.0.0.0', port=5001, debug=True)

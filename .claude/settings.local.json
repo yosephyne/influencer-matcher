@@ -1,0 +1,25 @@
+{
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  },
+  "permissions": {
+    "allow": [
+      "Bash(git -C /Users/lisaeichhoefer/Projects/2026/02_Praktikum/goodmoodfood/01_Testimonial Projekt/influencer-matcher log --all --oneline --decorate)",
+      "Bash(tree:*)",
+      "Bash(\"/Users/lisaeichhoefer/Projects/2026/02_Praktikum/goodmoodfood/01_Testimonial Projekt/influencer-matcher/venv/bin/python\" -c \"import flask; print\\(''Flask:'', flask.__version__\\)\")",
+      "Bash(\"/Users/lisaeichhoefer/Projects/2026/02_Praktikum/goodmoodfood/01_Testimonial Projekt/influencer-matcher/venv/bin/pip\" list)",
+      "Bash(python3:*)",
+      "Bash(\"/Users/lisaeichhoefer/Projects/2026/02_Praktikum/goodmoodfood/01_Testimonial Projekt/influencer-matcher/venv/bin/python3\" -c \"import pip; print\\(pip.__version__\\)\")",
+      "Bash(\"/Users/lisaeichhoefer/Projects/2026/02_Praktikum/goodmoodfood/01_Testimonial Projekt/influencer-matcher/venv/bin/python3\" -m pip --version)",
+      "Bash(./venv/bin/pip install:*)",
+      "Bash(./venv/bin/python3:*)",
+      "WebFetch(domain:www.goodmood-food.de)",
+      "WebFetch(domain:en.goodmood-food.de)",
+      "WebFetch(domain:www.linkedin.com)",
+      "Bash(code \"/Users/lisaeichhoefer/Projects/2026/02_Praktikum/goodmoodfood/01_Testimonial Projekt/influencer-matcher\")",
+      "Bash(open \"/Users/lisaeichhoefer/Projects/2026/02_Praktikum/goodmoodfood/01_Testimonial Projekt/influencer-matcher\")"
+    ]
+  },
+  "dangerously-skip-permissions": true,
+  "defaultMode": "bypassPermissions"
+}

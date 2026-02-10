@@ -1,17 +1,20 @@
-/* Modern, clean design for office use */
+/* goodmoodfood branded design */
 
 :root {
-    --primary: #4F46E5;
-    --primary-dark: #4338CA;
-    --secondary: #64748B;
+    --primary: #693080;
+    --primary-dark: #522666;
+    --primary-light: #8a4da6;
+    --secondary: #a56e43;
+    --accent-coral: #f29184;
+    --accent-gold: #efc15f;
     --success: #10B981;
-    --warning: #F59E0B;
+    --warning: #efc15f;
     --danger: #EF4444;
-    --background: #F8FAFC;
+    --background: #f5f0f8;
     --surface: #FFFFFF;
-    --text: #1E293B;
-    --text-muted: #64748B;
-    --border: #E2E8F0;
+    --text: #221f20;
+    --text-muted: #3a3a3a;
+    --border: #e0dbf6;
 }
 
 * {
@@ -21,7 +24,7 @@
 }
 
 body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    font-family: 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     background: var(--background);
     color: var(--text);
     line-height: 1.6;
@@ -33,21 +36,44 @@ body {
     padding: 2rem;
 }
 
+/* Brand */
+.brand-bar {
+    margin-bottom: 1rem;
+}
+
+.brand-name {
+    font-family: 'Montserrat', sans-serif;
+    font-weight: 900;
+    font-size: 1.6rem;
+    letter-spacing: -0.5px;
+    color: var(--primary);
+    text-transform: lowercase;
+}
+
+.brand-name-small {
+    font-family: 'Montserrat', sans-serif;
+    font-weight: 700;
+    color: var(--primary);
+    text-transform: lowercase;
+}
+
 /* Header */
 header {
     text-align: center;
     margin-bottom: 3rem;
+    padding-top: 1rem;
 }
 
 header h1 {
-    font-size: 2.5rem;
+    font-family: 'Montserrat', sans-serif;
+    font-size: 2.2rem;
     font-weight: 700;
     margin-bottom: 0.5rem;
-    color: var(--primary);
+    color: var(--text);
 }
 
 .subtitle {
-    font-size: 1.1rem;
+    font-size: 1.05rem;
     color: var(--text-muted);
 }
 
@@ -95,9 +121,11 @@ header h1 {
 }
 
 .card h2 {
-    font-size: 1.5rem;
+    font-family: 'Montserrat', sans-serif;
+    font-size: 1.4rem;
+    font-weight: 700;
     margin-bottom: 0.5rem;
-    color: var(--text);
+    color: var(--primary);
 }
 
 .card > p {
@@ -119,7 +147,7 @@ header h1 {
 .upload-zone:hover,
 .upload-zone.highlight {
     border-color: var(--primary);
-    background: rgba(79, 70, 229, 0.05);
+    background: rgba(105, 48, 128, 0.06);
 }
 
 .upload-icon {
@@ -148,12 +176,12 @@ header h1 {
 }
 
 .btn-secondary {
-    background: var(--secondary);
+    background: var(--accent-coral);
     color: white;
 }
 
 .btn-secondary:hover {
-    background: #475569;
+    background: #e07a6c;
 }
 
 /* Input Fields */
@@ -340,7 +368,7 @@ header h1 {
 }
 
 .stat-box.total {
-    background: rgba(79, 70, 229, 0.1);
+    background: rgba(105, 48, 128, 0.1);
 }
 
 .stat-number {
@@ -412,6 +440,8 @@ footer {
     padding: 2rem;
     color: var(--text-muted);
     font-size: 0.9rem;
+    border-top: 2px solid var(--border);
+    margin-top: 1rem;
 }
 
 /* Responsive */
