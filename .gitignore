@@ -13,21 +13,23 @@ __pycache__/
 # Data files (contain sensitive information)
 data/uploads/*
 data/exports/*
-*.csv
-*.xlsx
-*.xls
 
 # But keep the directory structure
 !data/uploads/.gitkeep
 !data/exports/.gitkeep
 
+# Ignore user-uploaded spreadsheets (but allow test_dateien/)
+*.xlsx
+*.xls
+
 # Flask
 instance/
 .webassets-cache
 
-# IDE
+# IDE / AI tools
 .vscode/
 .idea/
+.claude/
 *.swp
 *.swo
 *~
@@ -38,6 +40,15 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Database
+*.db
+
+# Encryption keys
+data/.fernet_key
+
+# Environment variables
+.env
 
 # Distribution
 build/

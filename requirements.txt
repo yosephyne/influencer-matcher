@@ -5,11 +5,19 @@ werkzeug>=3.0.1
 # Data processing
 pandas>=2.1.4
 openpyxl>=3.1.2
-python-docx>=1.1.0
 
 # Text matching and fuzzy search
 thefuzz>=0.20.0
 rapidfuzz>=3.0.0
 
-# For web interface styling
-flask-cors>=4.0.0
+# AI integration (unified API for OpenAI, Claude, Gemini via OpenRouter)
+litellm>=1.40.0
+
+# Encryption for API key storage
+cryptography>=42.0.0
+
+# HTTP requests (Notion API, OpenRouter)
+requests>=2.31.0
+
+# Environment config
+python-dotenv>=1.0.0

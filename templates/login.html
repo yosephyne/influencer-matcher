@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login | goodmoodfood</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-card">
+            <img src="{{ url_for('static', filename='images/gmf-logo.webp') }}" alt="goodmoodfood logo" class="login-logo">
+            <h1 class="login-title">Influencer Matcher</h1>
+            <p class="login-subtitle">Bitte anmelden</p>
+
+            {% if error %}
+            <div class="login-error">{{ error }}</div>
+            {% endif %}
+
+            <form method="POST" action="{{ url_for('login') }}">
+                <div class="form-group">
+                    <input type="password" name="password" class="input-field login-input"
+                           placeholder="Passwort eingeben..." autofocus required>
+                </div>
+                <button type="submit" class="btn btn-primary login-btn">Anmelden</button>
+            </form>
+        </div>
+    </div>
+</body>
+</html>

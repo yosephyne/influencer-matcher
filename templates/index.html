@@ -13,7 +13,9 @@
     <div class="container">
         <header>
             <div class="brand-bar">
+                <img src="{{ url_for('static', filename='images/gmf-logo.webp') }}" alt="goodmoodfood logo" class="brand-logo">
                 <span class="brand-name">goodmoodfood</span>
+                <a href="{{ url_for('logout') }}" class="logout-link">Abmelden</a>
             </div>
             <h1>Influencer Product Matcher</h1>
             <p class="subtitle">Verifiziere und optimiere Produkt-Zuweisungen basierend auf Kollaborationsdaten</p>
@@ -35,70 +37,79 @@
             </div>
         </div>
 
-        <!-- Main Content -->
-        <div class="content">
-            
+        <!-- Main Navigation -->
+        <nav class="main-nav">
+            <button class="nav-btn active" onclick="switchMainTab('matcher')">Matcher</button>
+            <button class="nav-btn" onclick="switchMainTab('profiles')">Profile</button>
+            <button class="nav-btn" onclick="switchMainTab('settings')">
+                Einstellungen <span class="status-dot" id="aiStatusDot"></span>
+            </button>
+        </nav>
+
+        <!-- ==================== TAB: MATCHER ==================== -->
+        <div id="main-matcher" class="main-tab-content">
+
             <!-- Step 1: Upload Data -->
             <section class="card">
-                <h2>📂 Step 1: Load Collaboration Data</h2>
-                <p>Upload CSV/Excel files containing past influencer collaborations</p>
-                
+                <h2>Step 1: Kollaborationsdaten laden</h2>
+                <p>CSV/Excel-Dateien mit bisherigen Influencer-Kollaborationen hochladen</p>
+
                 <div class="upload-zone" id="dropzone">
                     <input type="file" id="fileInput" multiple accept=".csv,.xlsx,.xls" style="display: none;">
-                    <div class="upload-icon">📁</div>
-                    <p>Drag & drop files here or click to browse</p>
+                    <div class="upload-icon">+</div>
+                    <p>Dateien hierher ziehen oder klicken</p>
                     <button class="btn btn-secondary" onclick="document.getElementById('fileInput').click()">
-                        Choose Files
+                        Dateien auswaehlen
                     </button>
                 </div>
-                
+
                 <div id="uploadStatus" class="status-message" style="display: none;"></div>
             </section>
 
             <!-- Step 2: Search Individual -->
             <section class="card">
-                <h2>🔍 Step 2: Search Influencer</h2>
-                <p>Find an influencer's collaboration history</p>
-                
+                <h2>Step 2: Influencer suchen</h2>
+                <p>Finde die Kollaborationshistorie eines Influencers</p>
+
                 <div class="search-box">
-                    <input type="text" id="searchInput" placeholder="Enter influencer name..." class="input-field">
-                    <button class="btn btn-primary" onclick="searchInfluencer()">Search</button>
+                    <input type="text" id="searchInput" placeholder="Influencer-Name eingeben..." class="input-field">
+                    <button class="btn btn-primary" onclick="searchInfluencer()">Suchen</button>
                 </div>
-                
+
                 <div id="searchResults" class="results-box" style="display: none;"></div>
             </section>
 
             <!-- Step 3: Verify Assignments -->
             <section class="card">
-                <h2>✓ Step 3: Verify Product Assignments</h2>
-                
+                <h2>Step 3: Produkt-Zuweisungen pruefen</h2>
+
                 <div class="tabs">
-                    <button class="tab-btn active" onclick="switchTab('single')">Single Check</button>
-                    <button class="tab-btn" onclick="switchTab('batch')">Batch Verify</button>
+                    <button class="tab-btn active" onclick="switchTab('single')">Einzelpruefung</button>
+                    <button class="tab-btn" onclick="switchTab('batch')">Batch-Pruefung</button>
                 </div>
-                
+
                 <!-- Single Verification -->
                 <div id="tab-single" class="tab-content">
                     <div class="form-group">
                         <label>Influencer Name</label>
-                        <input type="text" id="verifySingleName" class="input-field" placeholder="e.g., Laura Malina Seiler">
+                        <input type="text" id="verifySingleName" class="input-field" placeholder="z.B. Laura Malina Seiler">
                     </div>
                     <div class="form-group">
-                        <label>Assigned Product</label>
-                        <input type="text" id="verifySingleProduct" class="input-field" placeholder="e.g., Rohkakao Peru">
+                        <label>Zugewiesenes Produkt</label>
+                        <input type="text" id="verifySingleProduct" class="input-field" placeholder="z.B. Rohkakao Peru">
                     </div>
-                    <button class="btn btn-primary" onclick="verifySingle()">Verify Assignment</button>
-                    
+                    <button class="btn btn-primary" onclick="verifySingle()">Zuweisung pruefen</button>
+
                     <div id="verifySingleResult" class="result-card" style="display: none;"></div>
                 </div>
-                
+
                 <!-- Batch Verification -->
                 <div id="tab-batch" class="tab-content" style="display: none;">
-                    <p>Upload an Excel/CSV file with columns: Name, Product</p>
-                    
+                    <p>Excel/CSV-Datei mit Spalten: Name, Product hochladen</p>
+
                     <input type="file" id="batchFile" accept=".csv,.xlsx,.xls" class="input-field">
-                    <button class="btn btn-primary" onclick="verifyBatch()">Verify All</button>
-                    
+                    <button class="btn btn-primary" onclick="verifyBatch()">Alle pruefen</button>
+
                     <div id="batchResults" style="display: none;">
                         <div class="batch-stats"></div>
                         <div class="batch-table-container">
@@ -106,18 +117,188 @@
                                 <thead>
                                     <tr>
                                         <th>Name</th>
-                                        <th>Assigned</th>
+                                        <th>Zugewiesen</th>
                                         <th>Status</th>
-                                        <th>Historical Products</th>
+                                        <th>Bisherige Produkte</th>
                                         <th>Score</th>
                                     </tr>
                                 </thead>
                                 <tbody></tbody>
                             </table>
                         </div>
-                        <button class="btn btn-secondary" onclick="exportResults()">📥 Export Results</button>
+                        <button class="btn btn-secondary" onclick="exportResults()">Export Results</button>
                     </div>
                 </div>
+            </section>
+
+        </div>
+
+        <!-- ==================== TAB: PROFILES ==================== -->
+        <div id="main-profiles" class="main-tab-content" style="display: none;">
+
+            <section class="card">
+                <h2>Influencer-Profile</h2>
+                <p>Bewerte und verwalte alle Influencer-Profile</p>
+
+                <div class="search-box">
+                    <input type="text" id="profileSearchInput" placeholder="Profile durchsuchen..." class="input-field" oninput="filterProfiles()">
+                </div>
+
+                <div id="profileList" class="profile-list">
+                    <div class="loading">Profile werden geladen...</div>
+                </div>
+            </section>
+
+            <!-- Profile Detail (hidden by default) -->
+            <section id="profileDetail" class="card" style="display: none;">
+                <div class="profile-header">
+                    <h2 id="profileDetailName"></h2>
+                    <span class="profile-product-count" id="profileDetailCount"></span>
+                </div>
+
+                <div class="rating-section">
+                    <div class="rating-row">
+                        <label>Zuverlaessigkeit</label>
+                        <div class="star-rating" data-field="rating_reliability" id="stars-reliability"></div>
+                    </div>
+                    <div class="rating-row">
+                        <label>Content-Qualitaet</label>
+                        <div class="star-rating" data-field="rating_content_quality" id="stars-content"></div>
+                    </div>
+                    <div class="rating-row">
+                        <label>Kommunikation</label>
+                        <div class="star-rating" data-field="rating_communication" id="stars-communication"></div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Notizen</label>
+                    <textarea id="profileNotes" class="input-field profile-notes" placeholder="Notizen zu diesem Influencer..." rows="4"></textarea>
+                    <button class="btn btn-primary btn-small" onclick="saveProfileNotes()">Notizen speichern</button>
+                </div>
+
+                <div id="profileProducts" class="profile-products"></div>
+
+                <!-- Notion Data (shown when available) -->
+                <div id="profileNotionData" style="display: none;">
+                    <h3>Notion-Daten</h3>
+                    <div class="notion-meta">
+                        <span class="notion-badge" id="profileNotionStatus"></span>
+                        <span class="notion-follower" id="profileNotionFollower"></span>
+                        <span class="notion-produkt" id="profileNotionProdukt"></span>
+                        <a id="profileNotionLink" href="#" target="_blank" class="notion-link">In Notion oeffnen</a>
+                    </div>
+                </div>
+
+                <!-- Email Draft (fetched on-demand from Notion) -->
+                <div id="profileEmailDraft" style="display: none;">
+                    <h3>E-Mail-Entwurf</h3>
+                    <button class="btn btn-small btn-secondary" onclick="loadEmailDraft()" id="loadEmailBtn">
+                        E-Mail laden
+                    </button>
+                    <div id="emailDraftContent" class="email-draft-box"></div>
+                </div>
+            </section>
+
+        </div>
+
+        <!-- ==================== TAB: SETTINGS ==================== -->
+        <div id="main-settings" class="main-tab-content" style="display: none;">
+
+            <section class="card">
+                <h2>KI-Verbindung</h2>
+                <p>Verbinde eine KI fuer intelligente Match-Erklaerungen und Empfehlungen</p>
+
+                <!-- Connection Status -->
+                <div id="connectionStatus" class="connection-status">
+                    <div class="loading">Status wird geladen...</div>
+                </div>
+
+                <!-- Primary: OpenRouter OAuth -->
+                <div id="connectSection">
+                    <button class="btn connect-btn" onclick="connectOpenRouter()">
+                        Mit OpenRouter verbinden
+                    </button>
+                    <p class="connect-hint">Zugang zu GPT-4o, Claude, Gemini und 100+ Modellen ueber einen Account</p>
+                </div>
+
+                <!-- Disconnect -->
+                <div id="disconnectSection" style="display: none;">
+                    <button class="btn btn-danger" onclick="disconnectAI()">Verbindung trennen</button>
+                </div>
+
+                <!-- Fallback: Manual API Key -->
+                <details class="fallback-section">
+                    <summary>Oder manuell API-Key eingeben</summary>
+                    <div class="fallback-content">
+                        <div class="form-group">
+                            <label>Provider</label>
+                            <select id="manualProvider" class="input-field">
+                                <option value="openrouter">OpenRouter</option>
+                                <option value="openai">OpenAI</option>
+                                <option value="anthropic">Anthropic (Claude)</option>
+                                <option value="gemini">Google (Gemini)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>API-Key</label>
+                            <input type="password" id="manualApiKey" class="input-field" placeholder="sk-...">
+                        </div>
+                        <button class="btn btn-primary" onclick="saveManualKey()">Testen & Speichern</button>
+                        <div id="manualKeyStatus" style="display: none;"></div>
+                    </div>
+                </details>
+            </section>
+
+            <!-- Notion Connection -->
+            <section class="card">
+                <h2>Notion-Verbindung</h2>
+                <p>Verbinde die Testimonials-Datenbank aus Notion fuer aktuelle Daten und E-Mail-Entwuerfe</p>
+
+                <!-- Connection Status -->
+                <div id="notionConnectionStatus" class="connection-status">
+                    <div class="loading">Status wird geladen...</div>
+                </div>
+
+                <!-- Token Input (shown when disconnected) -->
+                <div id="notionConnectSection">
+                    <div class="form-group">
+                        <label>Notion Integration Token</label>
+                        <input type="password" id="notionToken" class="input-field" placeholder="ntn_...">
+                        <p class="connect-hint">
+                            Erstelle eine Integration unter
+                            <a href="https://www.notion.so/my-integrations" target="_blank" style="color: var(--primary-light);">notion.so/my-integrations</a>
+                            und teile die TM-Datenbank mit ihr.
+                        </p>
+                    </div>
+                    <button class="btn btn-primary" onclick="saveNotionToken()">Testen & Speichern</button>
+                    <div id="notionTokenStatus" style="display: none;"></div>
+                </div>
+
+                <!-- Connected state -->
+                <div id="notionDisconnectSection" style="display: none;">
+                    <button class="btn btn-primary" onclick="syncNotion()" id="notionSyncBtn">
+                        Notion-Daten synchronisieren
+                    </button>
+                    <span id="notionSyncStatus" class="connect-hint"></span>
+                    <br><br>
+                    <button class="btn btn-danger" onclick="disconnectNotion()">Verbindung trennen</button>
+                </div>
+            </section>
+
+            <!-- Password Change -->
+            <section class="card">
+                <h2>Passwort aendern</h2>
+                <div class="form-group">
+                    <label>Aktuelles Passwort</label>
+                    <input type="password" id="oldPassword" class="input-field" placeholder="Aktuelles Passwort">
+                </div>
+                <div class="form-group">
+                    <label>Neues Passwort</label>
+                    <input type="password" id="newPassword" class="input-field" placeholder="Neues Passwort (min. 4 Zeichen)">
+                </div>
+                <button class="btn btn-primary" onclick="changePassword()">Passwort aendern</button>
+                <div id="passwordChangeStatus" style="display: none;"></div>
             </section>
 
         </div>
@@ -127,6 +308,7 @@
         </footer>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 </body>
 </html>
