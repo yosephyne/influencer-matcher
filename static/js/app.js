@@ -1,18 +1,55 @@
 // Global state
 let currentResults = [];
 let allProfiles = [];
+let allProductsOverview = [];
 let currentProfileName = null;
 let notionConnected = false;
+let isAdmin = false;
+let profileSortField = 'name';
+let profileSortDir = 'asc';
 
 // Initialize on page load
-document.addEventListener('DOMContentLoaded', function() {
-    setupDropzone();
-    setupFileInput();
+document.addEventListener('DOMContentLoaded', async function() {
     loadStats();
     loadAISettings();
-    loadNotionSettings();
+    await loadNotionSettings();
     handleURLParams();
+    loadAuthStatus();
+    loadContactNames();
+    loadProductNames();
+
+    // Default to profiles tab — load profiles immediately
+    loadProfiles();
+
+    // Auto-sync Notion if connected (silent, in background)
+    if (notionConnected) {
+        autoSyncNotion();
+    }
+
+    // Dropzone only needs setup when matcher tab is visited (lazy)
+    setupDropzone();
+    setupFileInput();
 });
+
+// --- Auth Status ---
+
+async function loadAuthStatus() {
+    try {
+        const response = await fetch('/api/auth/status');
+        const data = await response.json();
+        isAdmin = data.is_admin;
+        applyAdminVisibility();
+    } catch (error) {
+        console.error('Failed to load auth status:', error);
+    }
+}
+
+function applyAdminVisibility() {
+    const adminSettings = document.getElementById('adminOnlySettings');
+    const adminHint = document.getElementById('adminOnlyHint');
+    if (adminSettings) adminSettings.style.display = isAdmin ? '' : 'none';
+    if (adminHint) adminHint.style.display = isAdmin ? 'none' : '';
+}
 
 // --- URL Parameter Handling (OAuth callback) ---
 
@@ -58,14 +95,12 @@ function switchMainTab(tabName) {
     });
     // Show selected tab
     document.getElementById('main-' + tabName).style.display = 'block';
-    // Set active button
-    document.querySelectorAll('.nav-btn').forEach(btn => {
-        if (btn.textContent.trim().toLowerCase().startsWith(tabName.substring(0, 4))) {
-            btn.classList.add('active');
-        }
-    });
+    // Set active button via data-tab attribute
+    const activeBtn = document.querySelector(`.nav-btn[data-tab="${tabName}"]`);
+    if (activeBtn) activeBtn.classList.add('active');
     // Load data for tab
     if (tabName === 'profiles') loadProfiles();
+    if (tabName === 'products') loadProductsOverview();
     if (tabName === 'settings') { loadAISettings(); loadNotionSettings(); }
 }
 
@@ -162,6 +197,45 @@ async function saveManualKey() {
     }
 }
 
+// --- Autocomplete ---
+
+async function loadContactNames() {
+    try {
+        const response = await fetch('/api/contacts');
+        const names = await response.json();
+        const datalist = document.getElementById('contactNamesList');
+        if (datalist) {
+            datalist.innerHTML = names.map(n => `<option value="${n}">`).join('');
+        }
+    } catch (error) {
+        console.error('Failed to load contact names:', error);
+    }
+}
+
+async function loadProductNames() {
+    try {
+        const response = await fetch('/api/stats');
+        const data = await response.json();
+        if (data.products) {
+            const datalist = document.getElementById('productNamesList');
+            if (datalist) {
+                datalist.innerHTML = data.products.map(p => `<option value="${p}">`).join('');
+            }
+        }
+    } catch (error) {
+        console.error('Failed to load product names:', error);
+    }
+}
+
+function populateProfileAutocomplete() {
+    const datalist = document.getElementById('profileNamesList');
+    if (datalist && allProfiles.length) {
+        datalist.innerHTML = allProfiles.map(p =>
+            `<option value="${p.display_name || p.name}">`
+        ).join('');
+    }
+}
+
 // --- Profiles ---
 
 async function loadProfiles() {
@@ -169,6 +243,7 @@ async function loadProfiles() {
         const response = await fetch('/api/profiles');
         allProfiles = await response.json();
         renderProfileList(allProfiles);
+        populateProfileAutocomplete();
     } catch (error) {
         document.getElementById('profileList').innerHTML =
             `<div class="error">Fehler: ${error.message}</div>`;
@@ -184,6 +259,24 @@ function filterProfiles() {
     renderProfileList(filtered);
 }
 
+function sortProfiles(field) {
+    if (profileSortField === field) {
+        profileSortDir = profileSortDir === 'asc' ? 'desc' : 'asc';
+    } else {
+        profileSortField = field;
+        profileSortDir = 'asc';
+    }
+    // Update header styles
+    document.querySelectorAll('.list-header .sort-col').forEach(col => {
+        col.classList.remove('active', 'desc');
+        if (col.dataset.sort === field) {
+            col.classList.add('active');
+            if (profileSortDir === 'desc') col.classList.add('desc');
+        }
+    });
+    renderProfileList(allProfiles);
+}
+
 function renderProfileList(profiles) {
     const container = document.getElementById('profileList');
     if (!profiles.length) {
@@ -191,16 +284,35 @@ function renderProfileList(profiles) {
         return;
     }
 
-    container.innerHTML = profiles.map(p => {
+    // Sort
+    const sorted = [...profiles].sort((a, b) => {
+        let valA, valB;
+        if (profileSortField === 'name') {
+            valA = (a.display_name || a.name || '').toLowerCase();
+            valB = (b.display_name || b.name || '').toLowerCase();
+        } else if (profileSortField === 'rating') {
+            valA = ((a.rating_reliability || 0) + (a.rating_content_quality || 0) + (a.rating_communication || 0)) / 3;
+            valB = ((b.rating_reliability || 0) + (b.rating_content_quality || 0) + (b.rating_communication || 0)) / 3;
+        } else if (profileSortField === 'products') {
+            valA = a.product_count || 0;
+            valB = b.product_count || 0;
+        }
+        if (valA < valB) return profileSortDir === 'asc' ? -1 : 1;
+        if (valA > valB) return profileSortDir === 'asc' ? 1 : -1;
+        return 0;
+    });
+
+    container.innerHTML = sorted.map(p => {
         const avgRating = Math.round(
             ((p.rating_reliability || 0) + (p.rating_content_quality || 0) + (p.rating_communication || 0)) / 3
         );
         const stars = avgRating > 0 ? '&#9733;'.repeat(avgRating) + '&#9734;'.repeat(5 - avgRating) : '&#9734;&#9734;&#9734;&#9734;&#9734;';
+        const isActive = p.name === currentProfileName ? ' active' : '';
         return `
-            <div class="profile-row" onclick="openProfile('${p.name.replace(/'/g, "\\'")}')">
+            <div class="profile-row${isActive}" onclick="openProfile('${p.name.replace(/'/g, "\\'")}')">
                 <div class="profile-row-name">${p.display_name || p.name}</div>
                 <div class="profile-row-stars">${stars}</div>
-                <div class="profile-row-count">${p.product_count || 0} Produkte</div>
+                <div class="profile-row-count">${p.product_count || 0}</div>
             </div>
         `;
     }).join('');
@@ -209,7 +321,18 @@ function renderProfileList(profiles) {
 async function openProfile(name) {
     currentProfileName = name;
     const detailSection = document.getElementById('profileDetail');
+    const placeholder = document.getElementById('profileDetailPlaceholder');
+
+    placeholder.style.display = 'none';
     detailSection.style.display = 'block';
+
+    // Highlight active row in list
+    document.querySelectorAll('.profile-row').forEach(row => row.classList.remove('active'));
+    document.querySelectorAll('.profile-row').forEach(row => {
+        if (row.onclick && row.onclick.toString().includes(name.replace(/'/g, "\\'"))) {
+            row.classList.add('active');
+        }
+    });
 
     try {
         const response = await fetch(`/api/profiles/${encodeURIComponent(name)}`);
@@ -217,6 +340,36 @@ async function openProfile(name) {
 
         document.getElementById('profileDetailName').textContent = profile.display_name || profile.name;
         document.getElementById('profileDetailCount').textContent = `${profile.product_count} Produkte`;
+
+        // Avatar (initials with deterministic color, or photo if available)
+        const avatarDiv = document.getElementById('profileAvatar');
+        const displayName = profile.display_name || profile.name;
+        const initials = displayName.split(/\s+/).map(w => w[0]).join('').substring(0, 2).toUpperCase();
+        const avatarColors = ['#8a4da6', '#f29184', '#efc15f', '#10B981', '#6366F1', '#EC4899', '#F59E0B', '#3B82F6'];
+        let hash = 0;
+        for (let i = 0; i < displayName.length; i++) hash = displayName.charCodeAt(i) + ((hash << 5) - hash);
+        const colorIdx = Math.abs(hash) % avatarColors.length;
+
+        if (profile.profile_photo) {
+            avatarDiv.innerHTML = `<img src="/api/profiles/${encodeURIComponent(profile.name)}/photo" alt="${initials}">`;
+            avatarDiv.style.backgroundColor = 'transparent';
+        } else {
+            avatarDiv.textContent = initials;
+            avatarDiv.innerHTML = initials;
+            avatarDiv.style.backgroundColor = avatarColors[colorIdx];
+        }
+
+        // Instagram link
+        const igLink = document.getElementById('profileInstagram');
+        const handle = profile.instagram_handle;
+        if (handle) {
+            const cleanHandle = handle.replace(/^@/, '');
+            igLink.href = `https://instagram.com/${cleanHandle}`;
+            igLink.textContent = `@${cleanHandle}`;
+            igLink.style.display = '';
+        } else {
+            igLink.style.display = 'none';
+        }
 
         // Render stars
         renderStars('stars-reliability', profile.rating_reliability || 0, 'rating_reliability');
@@ -242,6 +395,7 @@ async function openProfile(name) {
         // Notion data
         const notionDiv = document.getElementById('profileNotionData');
         const emailDiv = document.getElementById('profileEmailDraft');
+        const collabDiv = document.getElementById('profileCollabHistory');
 
         if (profile.notion_page_id) {
             notionDiv.style.display = 'block';
@@ -254,25 +408,37 @@ async function openProfile(name) {
             const notionLink = document.getElementById('profileNotionLink');
             notionLink.href = `https://www.notion.so/${profile.notion_page_id.replace(/-/g, '')}`;
 
+            // Show collab history section with load button
+            collabDiv.style.display = 'block';
+            document.getElementById('collabHistoryContent').innerHTML = '';
+            document.getElementById('loadCollabBtn').style.display = '';
+            document.getElementById('loadCollabBtn').disabled = false;
+            document.getElementById('loadCollabBtn').textContent = 'Zusaetzliche Notion-Daten laden';
+
             // Show email draft section with load button
             emailDiv.style.display = 'block';
             document.getElementById('emailDraftContent').innerHTML = '';
             document.getElementById('loadEmailBtn').style.display = '';
             document.getElementById('loadEmailBtn').disabled = false;
-            document.getElementById('loadEmailBtn').textContent = 'E-Mail laden';
+            document.getElementById('loadEmailBtn').textContent = 'E-Mail-Entwurf laden';
         } else if (notionConnected) {
-            // Notion is connected but this profile has no match yet
             notionDiv.style.display = 'block';
             notionDiv.innerHTML = '<h3>Notion-Daten</h3><p class="no-data">Kein Notion-Eintrag verknuepft. ' +
                 '<a href="#" onclick="switchMainTab(\'settings\'); return false;" style="color: var(--primary-light);">In Einstellungen synchronisieren</a></p>';
+            collabDiv.style.display = 'none';
             emailDiv.style.display = 'none';
         } else {
             notionDiv.style.display = 'none';
+            collabDiv.style.display = 'none';
             emailDiv.style.display = 'none';
         }
 
-        // Scroll to detail
-        detailSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        // Re-render list to update active highlight
+        renderProfileList(allProfiles.filter(p => {
+            const query = (document.getElementById('profileSearchInput').value || '').toLowerCase();
+            if (!query) return true;
+            return (p.name || '').toLowerCase().includes(query) || (p.display_name || '').toLowerCase().includes(query);
+        }));
     } catch (error) {
         showToast('Profil konnte nicht geladen werden', 'error');
     }
@@ -300,14 +466,13 @@ async function setRating(field, value) {
             body: JSON.stringify({ [field]: value })
         });
 
-        // Re-render stars
         const containerMap = {
             'rating_reliability': 'stars-reliability',
             'rating_content_quality': 'stars-content',
             'rating_communication': 'stars-communication'
         };
         renderStars(containerMap[field], value, field);
-        loadProfiles(); // Refresh list
+        loadProfiles();
     } catch (error) {
         showToast('Bewertung konnte nicht gespeichert werden', 'error');
     }
@@ -327,6 +492,111 @@ async function saveProfileNotes() {
     } catch (error) {
         showToast('Speichern fehlgeschlagen', 'error');
     }
+}
+
+// --- Photo Upload ---
+
+async function uploadProfilePhoto() {
+    if (!currentProfileName) return;
+    const input = document.getElementById('photoUploadInput');
+    const file = input.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('photo', file);
+
+    try {
+        const response = await fetch(`/api/profiles/${encodeURIComponent(currentProfileName)}/photo`, {
+            method: 'POST',
+            body: formData
+        });
+        const data = await response.json();
+        if (data.success) {
+            showToast('Foto hochgeladen', 'success');
+            openProfile(currentProfileName);
+        } else {
+            showToast(data.error, 'error');
+        }
+    } catch (error) {
+        showToast('Upload fehlgeschlagen: ' + error.message, 'error');
+    }
+    input.value = '';
+}
+
+// --- Products Tab ---
+
+async function loadProductsOverview() {
+    try {
+        const response = await fetch('/api/products/overview');
+        allProductsOverview = await response.json();
+        renderProductList(allProductsOverview);
+    } catch (error) {
+        document.getElementById('productList').innerHTML =
+            `<div class="error">Fehler: ${error.message}</div>`;
+    }
+}
+
+function filterProductList() {
+    const query = document.getElementById('productSearchInput').value.toLowerCase();
+    if (!query) {
+        renderProductList(allProductsOverview);
+        return;
+    }
+    const filtered = allProductsOverview.filter(p =>
+        p.name.toLowerCase().includes(query)
+    );
+    renderProductList(filtered);
+}
+
+function renderProductList(products) {
+    const container = document.getElementById('productList');
+    if (!products.length) {
+        container.innerHTML = '<div class="no-data">Keine Produkte gefunden</div>';
+        return;
+    }
+
+    container.innerHTML = products.map(p => `
+        <div class="product-row" onclick="openProduct('${p.name.replace(/'/g, "\\'")}')">
+            <div class="product-row-name">${p.name}</div>
+            <div class="product-row-count">${p.influencer_count} Influencer</div>
+        </div>
+    `).join('');
+}
+
+function openProduct(productName) {
+    const product = allProductsOverview.find(p => p.name === productName);
+    if (!product) return;
+
+    const detail = document.getElementById('productDetail');
+    const placeholder = document.getElementById('productDetailPlaceholder');
+
+    placeholder.style.display = 'none';
+    detail.style.display = 'block';
+
+    document.getElementById('productDetailName').textContent = product.name;
+    document.getElementById('productDetailCount').textContent =
+        `${product.influencer_count} Influencer haben mit diesem Produkt gearbeitet`;
+
+    const listDiv = document.getElementById('productInfluencers');
+    listDiv.innerHTML = product.influencers.map(name => `
+        <div class="product-influencer-row" onclick="switchToProfile('${name.replace(/'/g, "\\'")}')">
+            <span class="product-influencer-name">${name}</span>
+            <span class="product-influencer-link">Profil ansehen &rarr;</span>
+        </div>
+    `).join('');
+
+    // Highlight active product
+    document.querySelectorAll('.product-row').forEach(row => row.classList.remove('active'));
+    document.querySelectorAll('.product-row').forEach(row => {
+        if (row.querySelector('.product-row-name').textContent === productName) {
+            row.classList.add('active');
+        }
+    });
+}
+
+function switchToProfile(name) {
+    switchMainTab('profiles');
+    setTimeout(() => openProfile(name), 200);
 }
 
 // --- Notion Settings ---
@@ -391,7 +661,6 @@ async function saveNotionToken() {
             document.getElementById('notionToken').value = '';
             loadNotionSettings();
             showToast('Notion verbunden — Sync laeuft...', 'success');
-            // Auto-sync immediately after connecting
             await syncNotion();
         } else {
             statusDiv.innerHTML = `<div class="error">${data.error}</div>`;
@@ -412,26 +681,43 @@ async function disconnectNotion() {
 async function syncNotion() {
     const btn = document.getElementById('notionSyncBtn');
     const statusSpan = document.getElementById('notionSyncStatus');
-    btn.disabled = true;
-    btn.textContent = 'Synchronisiere...';
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Synchronisiere...';
+    }
 
     try {
         const response = await fetch('/api/notion/sync', { method: 'POST' });
         const data = await response.json();
 
         if (data.success) {
-            statusSpan.textContent = `${data.synced} synchronisiert, ${data.created} neu erstellt`;
+            if (statusSpan) statusSpan.textContent = `${data.synced} synchronisiert, ${data.created} neu erstellt`;
             showToast(`Notion-Sync fertig: ${data.synced} Eintraege`, 'success');
             loadProfiles();
         } else {
-            statusSpan.textContent = data.error;
+            if (statusSpan) statusSpan.textContent = data.error;
             showToast(data.error, 'error');
         }
     } catch (error) {
         showToast('Sync fehlgeschlagen: ' + error.message, 'error');
     } finally {
-        btn.disabled = false;
-        btn.textContent = 'Notion-Daten synchronisieren';
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = 'Notion-Daten synchronisieren';
+        }
+    }
+}
+
+async function autoSyncNotion() {
+    try {
+        const response = await fetch('/api/notion/sync', { method: 'POST' });
+        const data = await response.json();
+        if (data.success) {
+            console.log(`Auto-sync: ${data.synced} Eintraege synchronisiert`);
+            loadProfiles();
+        }
+    } catch (error) {
+        console.error('Auto-sync fehlgeschlagen:', error);
     }
 }
 
@@ -466,7 +752,42 @@ async function loadEmailDraft() {
         contentDiv.innerHTML = `<div class="error">Fehler: ${error.message}</div>`;
     } finally {
         btn.disabled = false;
-        btn.textContent = 'E-Mail laden';
+        btn.textContent = 'E-Mail-Entwurf laden';
+    }
+}
+
+// --- Collab History (on-demand from Notion) ---
+
+async function loadCollabHistory() {
+    if (!currentProfileName) return;
+
+    const btn = document.getElementById('loadCollabBtn');
+    const contentDiv = document.getElementById('collabHistoryContent');
+    btn.disabled = true;
+    btn.textContent = 'Wird geladen...';
+
+    try {
+        const response = await fetch(
+            `/api/profiles/${encodeURIComponent(currentProfileName)}/notion`
+        );
+        const data = await response.json();
+
+        if (data.error) {
+            contentDiv.innerHTML = `<div class="error">${data.error}</div>`;
+            return;
+        }
+
+        if (data.collab_history) {
+            contentDiv.innerHTML = `<div class="collab-history-content">${marked.parse(data.collab_history)}</div>`;
+            btn.style.display = 'none';
+        } else {
+            contentDiv.innerHTML = '<p class="no-data">Keine Kollaborations-Daten vorhanden</p>';
+        }
+    } catch (error) {
+        contentDiv.innerHTML = `<div class="error">Fehler: ${error.message}</div>`;
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Zusaetzliche Notion-Daten laden';
     }
 }
 
@@ -533,7 +854,6 @@ async function typewriterEffect(element, markdown) {
         await new Promise(r => setTimeout(r, 15));
     }
 
-    // Final render without cursor
     element.innerHTML = marked.parse(markdown);
 }
 
@@ -541,6 +861,7 @@ async function typewriterEffect(element, markdown) {
 
 function setupDropzone() {
     const dropzone = document.getElementById('dropzone');
+    if (!dropzone) return;
 
     ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
         dropzone.addEventListener(eventName, preventDefaults, false);
@@ -570,9 +891,8 @@ function handleDrop(e) {
 }
 
 function setupFileInput() {
-    document.getElementById('fileInput').addEventListener('change', function(e) {
-        uploadFiles(e.target.files);
-    });
+    const fi = document.getElementById('fileInput');
+    if (fi) fi.addEventListener('change', function(e) { uploadFiles(e.target.files); });
 }
 
 // Upload collaboration data files
@@ -603,6 +923,8 @@ async function uploadFiles(files) {
                 </div>
             `;
             loadStats();
+            loadContactNames();
+            loadProductNames();
         } else {
             statusDiv.innerHTML = `<div class="error">Fehler: ${data.error}</div>`;
         }
@@ -750,7 +1072,6 @@ async function verifyBatch() {
         const data = await response.json();
         currentResults = data.results;
 
-        // Show statistics
         const statsHtml = `
             <div class="batch-stats-grid">
                 <div class="stat-box verified">
@@ -772,7 +1093,6 @@ async function verifyBatch() {
             </div>
         `;
 
-        // Build table
         const tbody = document.querySelector('#resultsTable tbody');
         tbody.innerHTML = '';
 

@@ -42,6 +42,7 @@ notion = NotionService(db)
 
 
 DEFAULT_PASSWORD = 'goodmoodfood2025'
+DEFAULT_ADMIN_PASSWORD = 'gmf-admin-2026'
 
 
 def _ensure_password():
@@ -49,6 +50,9 @@ def _ensure_password():
     if not db.get_setting('app_password_hash'):
         pw_hash = generate_password_hash(DEFAULT_PASSWORD)
         db.set_setting('app_password_hash', pw_hash)
+    if not db.get_setting('admin_password_hash'):
+        pw_hash = generate_password_hash(DEFAULT_ADMIN_PASSWORD)
+        db.set_setting('admin_password_hash', pw_hash)
 
 
 @app.before_request
@@ -65,17 +69,28 @@ def require_login():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    """Login page with shared password."""
+    """Login page — team password or admin password."""
     if session.get('authenticated'):
         return redirect(url_for('index'))
 
     error = None
     if request.method == 'POST':
         password = request.form.get('password', '')
+
+        # Check admin password first
+        admin_hash = db.get_setting('admin_password_hash')
+        if admin_hash and check_password_hash(admin_hash, password):
+            session['authenticated'] = True
+            session['is_admin'] = True
+            return redirect(url_for('index'))
+
+        # Then check team password
         pw_hash = db.get_setting('app_password_hash')
         if pw_hash and check_password_hash(pw_hash, password):
             session['authenticated'] = True
+            session['is_admin'] = False
             return redirect(url_for('index'))
+
         error = 'Falsches Passwort'
 
     return render_template('login.html', error=error)
@@ -88,9 +103,21 @@ def logout():
     return redirect(url_for('login'))
 
 
+@app.route('/api/auth/status', methods=['GET'])
+def auth_status():
+    """Return authentication status and admin flag."""
+    return jsonify({
+        'authenticated': bool(session.get('authenticated')),
+        'is_admin': bool(session.get('is_admin')),
+    })
+
+
 @app.route('/api/settings/password', methods=['POST'])
 def change_password():
-    """Change the shared app password."""
+    """Change the shared app password (admin-only)."""
+    if not session.get('is_admin'):
+        return jsonify({'error': 'Nur Admins koennen das Passwort aendern'}), 403
+
     data = request.get_json()
     old_pw = data.get('old_password', '')
     new_pw = data.get('new_password', '')
@@ -282,19 +309,90 @@ def export_results():
     return send_file(output_path, as_attachment=True)
 
 
+@app.route('/api/contacts', methods=['GET'])
+def get_contacts():
+    """Get all contact names from matcher data (for autocomplete)."""
+    if not matcher:
+        return jsonify([])
+    return jsonify(sorted(matcher.collaboration_data.keys()))
+
+
 @app.route('/api/stats', methods=['GET'])
 def get_stats():
     """Get current matcher statistics"""
     global matcher
-    
+
     if not matcher:
         return jsonify({'loaded': False})
-    
+
     return jsonify({
         'loaded': True,
         'total_contacts': len(matcher.collaboration_data),
         'total_products': len(matcher.all_products),
         'products': sorted(list(matcher.all_products))
+    })
+
+
+@app.route('/api/products/overview', methods=['GET'])
+def get_products_overview():
+    """Get all products with influencer counts (for Produkte tab)."""
+    if not matcher:
+        return jsonify([])
+
+    product_map = {}
+    for name, products in matcher.collaboration_data.items():
+        for product in products:
+            if product not in product_map:
+                product_map[product] = []
+            product_map[product].append(name)
+
+    result = []
+    for product in sorted(product_map.keys()):
+        result.append({
+            'name': product,
+            'influencer_count': len(product_map[product]),
+            'influencers': sorted(product_map[product])
+        })
+    return jsonify(result)
+
+
+@app.route('/api/products/lookup', methods=['POST'])
+def product_lookup():
+    """Reverse lookup: find influencers for a product (fuzzy match)."""
+    if not matcher:
+        return jsonify({'error': 'Keine Daten geladen'}), 400
+
+    from thefuzz import fuzz as _fuzz
+
+    data = request.get_json()
+    query = data.get('product', '').strip()
+    if not query:
+        return jsonify({'error': 'Produkt erforderlich'}), 400
+
+    # Fuzzy match against all known products
+    best_product = None
+    best_score = 0
+    for product in matcher.all_products:
+        score = _fuzz.token_set_ratio(query.lower(), product.lower())
+        if score > best_score:
+            best_score = score
+            best_product = product
+
+    if best_score < 55:
+        return jsonify({'found': False, 'message': f'Kein Produkt gefunden fuer "{query}"'})
+
+    # Find all influencers with this product
+    influencers = []
+    for name, products in matcher.collaboration_data.items():
+        if best_product in products:
+            influencers.append(name)
+
+    return jsonify({
+        'found': True,
+        'product': best_product,
+        'match_score': best_score,
+        'influencers': sorted(influencers),
+        'influencer_count': len(influencers),
     })
 
 
@@ -348,7 +446,9 @@ def get_ai_settings():
 
 @app.route('/api/settings/ai', methods=['POST'])
 def save_ai_settings():
-    """Save manual API key (fallback method)."""
+    """Save manual API key (admin-only)."""
+    if not session.get('is_admin'):
+        return jsonify({'error': 'Nur Admins koennen KI-Einstellungen aendern'}), 403
     data = request.get_json()
     provider = data.get('provider')
     api_key = data.get('api_key')
@@ -368,7 +468,9 @@ def save_ai_settings():
 
 @app.route('/api/settings/ai/disconnect', methods=['POST'])
 def disconnect_ai():
-    """Remove AI connection."""
+    """Remove AI connection (admin-only)."""
+    if not session.get('is_admin'):
+        return jsonify({'error': 'Nur Admins koennen KI-Einstellungen aendern'}), 403
     db.clear_ai_provider()
     return jsonify({'success': True})
 
@@ -383,7 +485,9 @@ def get_notion_settings():
 
 @app.route('/api/settings/notion', methods=['POST'])
 def save_notion_settings():
-    """Save and validate Notion integration token."""
+    """Save and validate Notion integration token (admin-only)."""
+    if not session.get('is_admin'):
+        return jsonify({'error': 'Nur Admins koennen Notion-Einstellungen aendern'}), 403
     data = request.get_json()
     token = data.get('token', '').strip()
 
@@ -400,7 +504,9 @@ def save_notion_settings():
 
 @app.route('/api/settings/notion/disconnect', methods=['POST'])
 def disconnect_notion():
-    """Remove Notion connection."""
+    """Remove Notion connection (admin-only)."""
+    if not session.get('is_admin'):
+        return jsonify({'error': 'Nur Admins koennen Notion-Einstellungen aendern'}), 403
     notion.clear_token()
     return jsonify({'success': True})
 
@@ -480,9 +586,11 @@ def get_profile_notion(name):
     try:
         content = notion.fetch_page_content(profile['notion_page_id'])
         email_draft = notion.extract_email_draft(content)
+        collab_history = notion.extract_collab_history(content)
         page_id_clean = profile['notion_page_id'].replace('-', '')
         return jsonify({
             'email_draft': email_draft,
+            'collab_history': collab_history,
             'full_content': content,
             'notion_url': f'https://www.notion.so/{page_id_clean}',
         })
@@ -525,6 +633,52 @@ def get_profile(name):
     profile['product_count'] = len(products)
 
     return jsonify(profile)
+
+
+@app.route('/api/profiles/<path:name>/photo', methods=['POST'])
+def upload_profile_photo(name):
+    """Upload a profile photo (max 2MB, jpg/png/webp)."""
+    if 'photo' not in request.files:
+        return jsonify({'error': 'Kein Foto hochgeladen'}), 400
+
+    photo = request.files['photo']
+    if photo.filename == '':
+        return jsonify({'error': 'Keine Datei ausgewaehlt'}), 400
+
+    ext = photo.filename.rsplit('.', 1)[-1].lower() if '.' in photo.filename else ''
+    if ext not in ('jpg', 'jpeg', 'png', 'webp'):
+        return jsonify({'error': 'Nur JPG, PNG oder WebP erlaubt'}), 400
+
+    # Check size (2MB)
+    photo.seek(0, 2)
+    size = photo.tell()
+    photo.seek(0)
+    if size > 2 * 1024 * 1024:
+        return jsonify({'error': 'Datei zu gross (max 2MB)'}), 400
+
+    photos_dir = APP_ROOT / 'data' / 'photos'
+    photos_dir.mkdir(parents=True, exist_ok=True)
+
+    filename = secure_filename(name) + '.' + ext
+    filepath = photos_dir / filename
+    photo.save(filepath)
+
+    db.upsert_profile(name, profile_photo=filename)
+    return jsonify({'success': True, 'filename': filename})
+
+
+@app.route('/api/profiles/<path:name>/photo', methods=['GET'])
+def get_profile_photo(name):
+    """Serve a profile photo."""
+    profile = db.get_profile(name)
+    if not profile or not profile.get('profile_photo'):
+        return jsonify({'error': 'Kein Foto vorhanden'}), 404
+
+    filepath = APP_ROOT / 'data' / 'photos' / profile['profile_photo']
+    if not filepath.exists():
+        return jsonify({'error': 'Foto-Datei nicht gefunden'}), 404
+
+    return send_file(filepath)
 
 
 @app.route('/api/profiles/<path:name>', methods=['PUT'])

@@ -24,35 +24,175 @@
         <!-- Stats Bar -->
         <div id="stats" class="stats-bar" style="display: none;">
             <div class="stat-item">
-                <span class="stat-label">Contacts</span>
+                <span class="stat-label">Kontakte</span>
                 <span class="stat-value" id="stat-contacts">0</span>
             </div>
             <div class="stat-item">
-                <span class="stat-label">Products</span>
+                <span class="stat-label">Produkte</span>
                 <span class="stat-value" id="stat-products">0</span>
             </div>
             <div class="stat-item">
                 <span class="stat-label">Status</span>
-                <span class="stat-value status-ready">Ready</span>
+                <span class="stat-value status-ready">Bereit</span>
             </div>
         </div>
 
         <!-- Main Navigation -->
         <nav class="main-nav">
-            <button class="nav-btn active" onclick="switchMainTab('matcher')">Matcher</button>
-            <button class="nav-btn" onclick="switchMainTab('profiles')">Profile</button>
-            <button class="nav-btn" onclick="switchMainTab('settings')">
+            <button class="nav-btn active" data-tab="profiles" onclick="switchMainTab('profiles')">Profile</button>
+            <button class="nav-btn" data-tab="products" onclick="switchMainTab('products')">Produkte</button>
+            <button class="nav-btn" data-tab="matcher" onclick="switchMainTab('matcher')">Matcher</button>
+            <button class="nav-btn" data-tab="settings" onclick="switchMainTab('settings')">
                 Einstellungen <span class="status-dot" id="aiStatusDot"></span>
             </button>
         </nav>
 
-        <!-- ==================== TAB: MATCHER ==================== -->
-        <div id="main-matcher" class="main-tab-content">
+        <!-- ==================== TAB: PROFILES (default) ==================== -->
+        <div id="main-profiles" class="main-tab-content">
+            <div class="split-layout">
+                <!-- Left: Profile list -->
+                <div class="split-sidebar">
+                    <div class="card sidebar-card">
+                        <h2>Influencer-Profile</h2>
+                        <div class="search-box">
+                            <input type="text" id="profileSearchInput" placeholder="Name suchen..." class="input-field" oninput="filterProfiles()" list="profileNamesList">
+                        </div>
+                        <datalist id="profileNamesList"></datalist>
 
-            <!-- Step 1: Upload Data -->
-            <section class="card">
-                <h2>Step 1: Kollaborationsdaten laden</h2>
-                <p>CSV/Excel-Dateien mit bisherigen Influencer-Kollaborationen hochladen</p>
+                        <!-- Sortable column headers -->
+                        <div class="list-header">
+                            <span class="list-header-col list-header-name sort-col active" data-sort="name" onclick="sortProfiles('name')">Name</span>
+                            <span class="list-header-col list-header-stars sort-col" data-sort="rating" onclick="sortProfiles('rating')">Bewertung</span>
+                            <span class="list-header-col list-header-count sort-col" data-sort="products" onclick="sortProfiles('products')">Produkte</span>
+                        </div>
+
+                        <div id="profileList" class="profile-list">
+                            <div class="loading">Profile werden geladen...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right: Profile detail -->
+                <div class="split-main">
+                    <div id="profileDetailPlaceholder" class="card placeholder-card">
+                        <div class="no-data">Waehle ein Profil aus der Liste</div>
+                    </div>
+
+                    <section id="profileDetail" class="card detail-card" style="display: none;">
+                        <div class="profile-header">
+                            <div class="profile-avatar-wrapper">
+                                <div class="profile-avatar" id="profileAvatar"></div>
+                                <label class="photo-upload-btn" title="Foto hochladen">
+                                    <input type="file" id="photoUploadInput" accept="image/jpeg,image/png,image/webp" style="display:none" onchange="uploadProfilePhoto()">
+                                    +
+                                </label>
+                            </div>
+                            <div class="profile-header-info">
+                                <h2 id="profileDetailName"></h2>
+                                <a id="profileInstagram" href="#" target="_blank" class="profile-instagram" style="display: none;"></a>
+                                <span class="profile-product-count" id="profileDetailCount"></span>
+                            </div>
+                        </div>
+
+                        <div class="rating-section">
+                            <div class="rating-row">
+                                <label>Zuverlaessigkeit</label>
+                                <div class="star-rating" data-field="rating_reliability" id="stars-reliability"></div>
+                            </div>
+                            <div class="rating-row">
+                                <label>Content-Qualitaet</label>
+                                <div class="star-rating" data-field="rating_content_quality" id="stars-content"></div>
+                            </div>
+                            <div class="rating-row">
+                                <label>Kommunikation</label>
+                                <div class="star-rating" data-field="rating_communication" id="stars-communication"></div>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Notizen</label>
+                            <textarea id="profileNotes" class="input-field profile-notes" placeholder="Notizen zu diesem Influencer..." rows="3"></textarea>
+                            <button class="btn btn-primary btn-small" onclick="saveProfileNotes()">Notizen speichern</button>
+                        </div>
+
+                        <div id="profileProducts" class="profile-products"></div>
+
+                        <!-- Notion Data (shown when available) -->
+                        <div id="profileNotionData" style="display: none;">
+                            <h3>Notion-Daten</h3>
+                            <div class="notion-meta">
+                                <span class="notion-badge" id="profileNotionStatus"></span>
+                                <span class="notion-follower" id="profileNotionFollower"></span>
+                                <span class="notion-produkt" id="profileNotionProdukt"></span>
+                                <a id="profileNotionLink" href="#" target="_blank" class="notion-link">In Notion oeffnen</a>
+                            </div>
+                        </div>
+
+                        <!-- Collab History (fetched on-demand from Notion) -->
+                        <div id="profileCollabHistory" style="display: none;">
+                            <h3>Kollaborations-Historie</h3>
+                            <button class="btn btn-small btn-secondary" onclick="loadCollabHistory()" id="loadCollabBtn">
+                                Zusaetzliche Notion-Daten laden
+                            </button>
+                            <div id="collabHistoryContent" class="collab-history-box"></div>
+                        </div>
+
+                        <!-- Email Draft (fetched on-demand from Notion) -->
+                        <div id="profileEmailDraft" style="display: none;">
+                            <h3>E-Mail-Entwurf</h3>
+                            <button class="btn btn-small btn-secondary" onclick="loadEmailDraft()" id="loadEmailBtn">
+                                E-Mail-Entwurf laden
+                            </button>
+                            <div id="emailDraftContent" class="email-draft-box"></div>
+                        </div>
+                    </section>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== TAB: PRODUCTS ==================== -->
+        <div id="main-products" class="main-tab-content" style="display: none;">
+            <div class="split-layout">
+                <!-- Left: Product list -->
+                <div class="split-sidebar">
+                    <div class="card sidebar-card">
+                        <h2>Produkte</h2>
+                        <p>Klicke auf ein Produkt, um die zugehoerigen Influencer zu sehen</p>
+                        <div class="search-box">
+                            <input type="text" id="productSearchInput" placeholder="Produkt suchen (auch mit Tippfehler)..." class="input-field" oninput="filterProductList()" list="productNamesList">
+                        </div>
+                        <datalist id="productNamesList"></datalist>
+
+                        <div id="productList" class="product-list">
+                            <div class="loading">Produkte werden geladen...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right: Product detail (influencer list) -->
+                <div class="split-main">
+                    <div id="productDetailPlaceholder" class="card placeholder-card">
+                        <div class="no-data">Waehle ein Produkt aus der Liste</div>
+                    </div>
+
+                    <div id="productDetail" class="card detail-card" style="display: none;">
+                        <h2 id="productDetailName"></h2>
+                        <p id="productDetailCount" class="text-muted"></p>
+                        <div id="productInfluencers" class="product-influencer-list"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== TAB: MATCHER ==================== -->
+        <div id="main-matcher" class="main-tab-content" style="display: none;">
+
+            <!-- Step 1: Upload Data (collapsed by default) -->
+            <details class="card upload-details">
+                <summary class="upload-summary">
+                    Optional: Zusaetzliche Kollaborationsdaten hochladen
+                </summary>
+                <p class="upload-hint">CSV/Excel-Dateien mit bisherigen Influencer-Kollaborationen. Testdaten sind bereits geladen.</p>
 
                 <div class="upload-zone" id="dropzone">
                     <input type="file" id="fileInput" multiple accept=".csv,.xlsx,.xls" style="display: none;">
@@ -64,24 +204,25 @@
                 </div>
 
                 <div id="uploadStatus" class="status-message" style="display: none;"></div>
-            </section>
+            </details>
 
             <!-- Step 2: Search Individual -->
             <section class="card">
-                <h2>Step 2: Influencer suchen</h2>
+                <h2>Influencer suchen</h2>
                 <p>Finde die Kollaborationshistorie eines Influencers</p>
 
                 <div class="search-box">
-                    <input type="text" id="searchInput" placeholder="Influencer-Name eingeben..." class="input-field">
+                    <input type="text" id="searchInput" placeholder="z.B. Laura Malina Seiler" class="input-field" list="contactNamesList" value="Laura Malina Seiler">
                     <button class="btn btn-primary" onclick="searchInfluencer()">Suchen</button>
                 </div>
+                <datalist id="contactNamesList"></datalist>
 
                 <div id="searchResults" class="results-box" style="display: none;"></div>
             </section>
 
             <!-- Step 3: Verify Assignments -->
             <section class="card">
-                <h2>Step 3: Produkt-Zuweisungen pruefen</h2>
+                <h2>Produkt-Zuweisung pruefen</h2>
 
                 <div class="tabs">
                     <button class="tab-btn active" onclick="switchTab('single')">Einzelpruefung</button>
@@ -92,11 +233,11 @@
                 <div id="tab-single" class="tab-content">
                     <div class="form-group">
                         <label>Influencer Name</label>
-                        <input type="text" id="verifySingleName" class="input-field" placeholder="z.B. Laura Malina Seiler">
+                        <input type="text" id="verifySingleName" class="input-field" placeholder="z.B. Laura Malina Seiler" list="contactNamesList" value="Laura Malina Seiler">
                     </div>
                     <div class="form-group">
                         <label>Zugewiesenes Produkt</label>
-                        <input type="text" id="verifySingleProduct" class="input-field" placeholder="z.B. Rohkakao Peru">
+                        <input type="text" id="verifySingleProduct" class="input-field" placeholder="z.B. Rohkakao Peru (auch Tippfehler OK)" list="productNamesList" value="Rohkakao Peru">
                     </div>
                     <button class="btn btn-primary" onclick="verifySingle()">Zuweisung pruefen</button>
 
@@ -133,78 +274,15 @@
 
         </div>
 
-        <!-- ==================== TAB: PROFILES ==================== -->
-        <div id="main-profiles" class="main-tab-content" style="display: none;">
-
-            <section class="card">
-                <h2>Influencer-Profile</h2>
-                <p>Bewerte und verwalte alle Influencer-Profile</p>
-
-                <div class="search-box">
-                    <input type="text" id="profileSearchInput" placeholder="Profile durchsuchen..." class="input-field" oninput="filterProfiles()">
-                </div>
-
-                <div id="profileList" class="profile-list">
-                    <div class="loading">Profile werden geladen...</div>
-                </div>
-            </section>
-
-            <!-- Profile Detail (hidden by default) -->
-            <section id="profileDetail" class="card" style="display: none;">
-                <div class="profile-header">
-                    <h2 id="profileDetailName"></h2>
-                    <span class="profile-product-count" id="profileDetailCount"></span>
-                </div>
-
-                <div class="rating-section">
-                    <div class="rating-row">
-                        <label>Zuverlaessigkeit</label>
-                        <div class="star-rating" data-field="rating_reliability" id="stars-reliability"></div>
-                    </div>
-                    <div class="rating-row">
-                        <label>Content-Qualitaet</label>
-                        <div class="star-rating" data-field="rating_content_quality" id="stars-content"></div>
-                    </div>
-                    <div class="rating-row">
-                        <label>Kommunikation</label>
-                        <div class="star-rating" data-field="rating_communication" id="stars-communication"></div>
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label>Notizen</label>
-                    <textarea id="profileNotes" class="input-field profile-notes" placeholder="Notizen zu diesem Influencer..." rows="4"></textarea>
-                    <button class="btn btn-primary btn-small" onclick="saveProfileNotes()">Notizen speichern</button>
-                </div>
-
-                <div id="profileProducts" class="profile-products"></div>
-
-                <!-- Notion Data (shown when available) -->
-                <div id="profileNotionData" style="display: none;">
-                    <h3>Notion-Daten</h3>
-                    <div class="notion-meta">
-                        <span class="notion-badge" id="profileNotionStatus"></span>
-                        <span class="notion-follower" id="profileNotionFollower"></span>
-                        <span class="notion-produkt" id="profileNotionProdukt"></span>
-                        <a id="profileNotionLink" href="#" target="_blank" class="notion-link">In Notion oeffnen</a>
-                    </div>
-                </div>
-
-                <!-- Email Draft (fetched on-demand from Notion) -->
-                <div id="profileEmailDraft" style="display: none;">
-                    <h3>E-Mail-Entwurf</h3>
-                    <button class="btn btn-small btn-secondary" onclick="loadEmailDraft()" id="loadEmailBtn">
-                        E-Mail laden
-                    </button>
-                    <div id="emailDraftContent" class="email-draft-box"></div>
-                </div>
-            </section>
-
-        </div>
-
         <!-- ==================== TAB: SETTINGS ==================== -->
         <div id="main-settings" class="main-tab-content" style="display: none;">
 
+            <!-- Non-admin hint (shown for team users) -->
+            <div id="adminOnlyHint" class="card" style="display: none;">
+                <p class="no-data">Fuer Aenderungen an Verbindungen und Passwort ist ein Admin-Zugang noetig.</p>
+            </div>
+
+            <div id="adminOnlySettings">
             <section class="card">
                 <h2>KI-Verbindung</h2>
                 <p>Verbinde eine KI fuer intelligente Match-Erklaerungen und Empfehlungen</p>
@@ -300,6 +378,7 @@
                 <button class="btn btn-primary" onclick="changePassword()">Passwort aendern</button>
                 <div id="passwordChangeStatus" style="display: none;"></div>
             </section>
+            </div><!-- /adminOnlySettings -->
 
         </div>
 

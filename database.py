@@ -73,6 +73,7 @@ class Database:
             ("influencer_profiles", "notion_produkt", "TEXT DEFAULT ''"),
             ("influencer_profiles", "notion_follower", "INTEGER DEFAULT 0"),
             ("influencer_profiles", "notion_synced_at", "TEXT DEFAULT ''"),
+            ("influencer_profiles", "profile_photo", "TEXT DEFAULT ''"),
         ]
         for table, col, col_type in migration_columns:
             try:

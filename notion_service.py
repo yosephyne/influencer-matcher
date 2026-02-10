@@ -155,6 +155,33 @@ class NotionService:
 
         return None
 
+    def extract_collab_history(self, content_text):
+        """Extract everything from page content EXCEPT the EMAIL NEU section.
+        Returns markdown string suitable for display.
+        """
+        if not content_text:
+            return None
+
+        lines = content_text.split('\n')
+        result_lines = []
+        skip = False
+
+        for line in lines:
+            # Detect start of EMAIL NEU section
+            if re.search(r'(#+\s+.*EMAIL\s*NEU|📧\s*EMAIL\s*NEU)', line, re.IGNORECASE):
+                skip = True
+                continue
+
+            # Detect next heading or divider → stop skipping
+            if skip and (re.match(r'^#+\s+', line) or line.strip() == '---'):
+                skip = False
+
+            if not skip:
+                result_lines.append(line)
+
+        text = '\n'.join(result_lines).strip()
+        return text if text else None
+
     # --- Property Parsers ---
 
     def _parse_properties(self, page):
