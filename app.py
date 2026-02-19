@@ -21,6 +21,7 @@ APP_ROOT = Path(__file__).parent.absolute()
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max file size
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0  # No caching for static files
 app.config['UPLOAD_FOLDER'] = APP_ROOT / 'data' / 'uploads'
 app.config['UPLOAD_FOLDER'].mkdir(parents=True, exist_ok=True)
 
@@ -404,11 +405,115 @@ def seed_profiles_from_matcher():
     for name in matcher.collaboration_data:
         existing = db.get_profile(name)
         if not existing:
-            products = matcher.get_products_for_influencer(name)
             db.upsert_profile(name, display_name=name)
             count += 1
     if count:
         print(f"Seeded {count} new influencer profiles into DB")
+
+
+# --- Auto-Rating Computation ---
+
+# Product category mapping for auto-tagging
+PRODUCT_CATEGORIES = {
+    'Kakao': ['Rohkakao Peru', 'Rohkakao Ecuador', 'Rohkakao Criollo', 'Kakao Nibs',
+              'Feel Good Kakao', 'Rise Up & Shine', 'Calm Down & Relax',
+              'The Wholy Bean', 'SinnPhonie', 'Queen Beans'],
+    'Vitalpilze': ['Reishi', 'Lions Mane', 'Cordyceps', 'Chaga', 'Pure Power',
+                   'Vitalpilz Extrakte', 'Vitalpilz Kakao'],
+    'Superfoods': ['Coco Aminos', 'Ashwagandha', 'Matcha', 'Chlorella', 'Maca', 'Lucuma'],
+    'Snacks': ['Cashew Cluster', 'Peru Butter Drops'],
+}
+
+
+def compute_auto_ratings(profile, product_count):
+    """Compute data-driven star ratings (1-5) from available data."""
+    # 1) Produkt-Erfahrung: based on product count
+    if product_count >= 6:
+        r_experience = 5
+    elif product_count >= 4:
+        r_experience = 4
+    elif product_count >= 3:
+        r_experience = 3
+    elif product_count >= 2:
+        r_experience = 2
+    elif product_count >= 1:
+        r_experience = 1
+    else:
+        r_experience = 0
+
+    # 2) Reichweite: based on follower count
+    followers = profile.get('notion_follower', 0) or 0
+    if followers >= 100000:
+        r_reach = 5
+    elif followers >= 25000:
+        r_reach = 4
+    elif followers >= 5000:
+        r_reach = 3
+    elif followers >= 1000:
+        r_reach = 2
+    elif followers > 0:
+        r_reach = 1
+    else:
+        r_reach = 0
+
+    # 3) Kooperations-Status: based on kontakt + status fields
+    kontakt = (profile.get('notion_kontakt', '') or '').lower()
+    status = (profile.get('notion_status', '') or '').lower()
+
+    r_status = 0
+    # Map known status values to ratings
+    status_map = {
+        'abgeschlossen': 5, 'done': 5, 'versendet': 5,
+        'zugesagt': 4, 'agreed': 4, 'kooperation': 4,
+        'in verhandlung': 3, 'negotiation': 3, 'in bearbeitung': 3,
+        'antwort': 2, 'antwort erhalten': 2, 'replied': 2,
+        'angeschrieben': 1, 'kontaktiert': 1, 'gesendet': 1,
+    }
+    for key, val in status_map.items():
+        if key in kontakt or key in status:
+            r_status = max(r_status, val)
+
+    return {
+        'auto_rating_reliability': r_experience,
+        'auto_rating_content_quality': r_reach,
+        'auto_rating_communication': r_status,
+    }
+
+
+def _auto_tag_profile(name, notion_entry=None):
+    """Generate tags for a profile from Notion rolle + product categories."""
+    import json
+
+    profile = db.get_profile(name)
+    if not profile:
+        return
+
+    # Start with existing manual tags
+    try:
+        existing_tags = set(json.loads(profile.get('tags', '[]')))
+    except (json.JSONDecodeError, TypeError):
+        existing_tags = set()
+
+    # Add tags from Notion rolle
+    if notion_entry and notion_entry.get('rolle'):
+        rolle = notion_entry['rolle'].strip()
+        if rolle:
+            # Split on common separators
+            import re as _re
+            parts = _re.split(r'[,;/&]+', rolle)
+            for part in parts:
+                tag = part.strip()
+                if tag and len(tag) > 1:
+                    existing_tags.add(tag)
+
+    # Add tags from product categories
+    if matcher:
+        products = matcher.get_products_for_influencer(name)
+        for cat_name, cat_products in PRODUCT_CATEGORIES.items():
+            if any(p in cat_products for p in products):
+                existing_tags.add(cat_name)
+
+    db.upsert_profile(name, tags=json.dumps(sorted(existing_tags), ensure_ascii=False))
 
 
 # --- OAuth Routes ---
@@ -536,10 +641,14 @@ def sync_notion():
         if not notion_name:
             continue
 
-        # Fuzzy-match against local profiles
+        # Fuzzy-match against local profiles (prefer exact case-insensitive match)
         best_match = None
         best_score = 0
         for local_name in local_names:
+            if local_name.lower() == notion_name.lower():
+                best_match = local_name
+                best_score = 100
+                break
             score = fuzz.token_set_ratio(notion_name.lower(), local_name.lower())
             if score > best_score and score >= 80:
                 best_score = score
@@ -562,7 +671,21 @@ def sync_notion():
             notion_status=entry.get('status', ''),
             notion_produkt=entry.get('produkt', ''),
             notion_follower=entry.get('follower', 0),
+            notion_kontakt=entry.get('kontakt', ''),
+            notion_rolle=entry.get('rolle', ''),
+            email=entry.get('email', ''),
+            icon_url=entry.get('icon_url', ''),
         )
+
+        # Import Matcher-Notiz from Notion if local notes are empty
+        notion_notiz = entry.get('matcher_notiz', '')
+        if notion_notiz:
+            local_profile = db.get_profile(target_name)
+            if local_profile and not local_profile.get('notes'):
+                db.upsert_profile(target_name, notes=notion_notiz)
+
+        # Auto-generate tags from Notion rolle + product categories
+        _auto_tag_profile(target_name, entry)
         synced += 1
 
     return jsonify({
@@ -587,12 +710,10 @@ def get_profile_notion(name):
         content = notion.fetch_page_content(profile['notion_page_id'])
         email_draft = notion.extract_email_draft(content)
         collab_history = notion.extract_collab_history(content)
-        page_id_clean = profile['notion_page_id'].replace('-', '')
         return jsonify({
             'email_draft': email_draft,
             'collab_history': collab_history,
             'full_content': content,
-            'notion_url': f'https://www.notion.so/{page_id_clean}',
         })
     except Exception as e:
         return jsonify({'error': f'Notion Fehler: {str(e)}'}), 500
@@ -602,10 +723,10 @@ def get_profile_notion(name):
 
 @app.route('/api/profiles', methods=['GET'])
 def get_profiles():
-    """Get all influencer profiles with product counts."""
+    """Get all influencer profiles with product counts and auto-ratings."""
+    import json as _json
     profiles = db.get_all_profiles()
 
-    # Enrich with product count from matcher
     for p in profiles:
         if matcher:
             products = matcher.get_products_for_influencer(p['name'])
@@ -613,12 +734,24 @@ def get_profiles():
         else:
             p['product_count'] = 0
 
+        # Auto-ratings for sorting/display in list
+        auto = compute_auto_ratings(p, p['product_count'])
+        p.update(auto)
+
+        # Parse tags
+        try:
+            p['tags'] = _json.loads(p.get('tags', '[]'))
+        except (ValueError, TypeError):
+            p['tags'] = []
+
     return jsonify(profiles)
 
 
 @app.route('/api/profiles/<path:name>', methods=['GET'])
 def get_profile(name):
     """Get single profile, auto-create from matcher data if needed."""
+    import json as _json
+
     profile = db.get_profile(name)
 
     if not profile:
@@ -631,6 +764,29 @@ def get_profile(name):
 
     profile['products'] = products
     profile['product_count'] = len(products)
+
+    # Compute auto-ratings from data
+    auto_ratings = compute_auto_ratings(profile, len(products))
+    profile.update(auto_ratings)
+
+    # Parse tags from JSON string to list
+    try:
+        profile['tags'] = _json.loads(profile.get('tags', '[]'))
+    except (ValueError, TypeError):
+        profile['tags'] = []
+
+    # Auto-load Notion page content if available (collab history + email draft)
+    if profile.get('notion_page_id') and notion.is_connected():
+        try:
+            content = notion.fetch_page_content(profile['notion_page_id'])
+            profile['email_draft'] = notion.extract_email_draft(content)
+            profile['collab_history'] = notion.extract_collab_history(content)
+        except Exception:
+            profile['email_draft'] = None
+            profile['collab_history'] = None
+
+    # Let frontend know if AI is available
+    profile['ai_configured'] = ai.get_status().get('configured', False)
 
     return jsonify(profile)
 
@@ -683,13 +839,13 @@ def get_profile_photo(name):
 
 @app.route('/api/profiles/<path:name>', methods=['PUT'])
 def update_profile(name):
-    """Update profile ratings/notes."""
+    """Update profile ratings/notes. Syncs notes to Notion as comment."""
     data = request.get_json()
 
     allowed_fields = {
         'rating_reliability', 'rating_content_quality',
         'rating_communication', 'notes', 'instagram_handle',
-        'display_name',
+        'display_name', 'email',
     }
     updates = {k: v for k, v in data.items() if k in allowed_fields}
 
@@ -697,7 +853,70 @@ def update_profile(name):
         return jsonify({'error': 'Keine gueltigen Felder'}), 400
 
     profile = db.upsert_profile(name, **updates)
-    return jsonify(profile)
+
+    # Sync notes to Notion as "Matcher-Notiz" property
+    notion_synced = False
+    notion_error = ''
+    if 'notes' in updates:
+        has_notion = notion.is_connected()
+        has_page_id = bool(profile.get('notion_page_id'))
+        print(f'[Notion] Saving notes for "{name}": connected={has_notion}, page_id={profile.get("notion_page_id", "NONE")}')
+        if has_notion and has_page_id:
+            try:
+                notion.update_property(
+                    profile['notion_page_id'],
+                    'Matcher-Notiz',
+                    updates['notes']
+                )
+                notion_synced = True
+                print(f'[Notion] Notes synced OK for "{name}"')
+            except Exception as e:
+                notion_error = str(e)
+                print(f'[Notion] Notiz-Sync FEHLER: {e}')
+
+    result = dict(profile)
+    result['notion_synced'] = notion_synced
+    if notion_error:
+        result['notion_error'] = notion_error
+    return jsonify(result)
+
+
+# --- Tags Routes ---
+
+@app.route('/api/tags', methods=['GET'])
+def get_tags():
+    """Get all unique tags used across profiles."""
+    return jsonify(db.get_all_tags())
+
+
+@app.route('/api/profiles/<path:name>/tags', methods=['POST'])
+def update_profile_tags(name):
+    """Add or remove a tag from a profile."""
+    import json as _json
+
+    data = request.get_json()
+    action = data.get('action', 'add')  # 'add' or 'remove'
+    tag = data.get('tag', '').strip()
+
+    if not tag:
+        return jsonify({'error': 'Tag erforderlich'}), 400
+
+    profile = db.get_profile(name)
+    if not profile:
+        return jsonify({'error': 'Profil nicht gefunden'}), 404
+
+    try:
+        tags = set(_json.loads(profile.get('tags', '[]')))
+    except (ValueError, TypeError):
+        tags = set()
+
+    if action == 'add':
+        tags.add(tag)
+    elif action == 'remove':
+        tags.discard(tag)
+
+    db.upsert_profile(name, tags=_json.dumps(sorted(tags), ensure_ascii=False))
+    return jsonify({'success': True, 'tags': sorted(tags)})
 
 
 # --- AI Routes ---
@@ -723,6 +942,27 @@ def explain_match():
     try:
         explanation = ai.explain_match(name, products, product, match_score)
         return jsonify({'explanation': explanation})
+    except AINotConfiguredError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        return jsonify({'error': f'AI Fehler: {str(e)}'}), 500
+
+
+@app.route('/api/profiles/<path:name>/ai-analysis', methods=['POST'])
+def profile_ai_analysis(name):
+    """AI generates a comprehensive profile analysis."""
+    profile = db.get_profile(name)
+    if not profile:
+        return jsonify({'error': 'Profil nicht gefunden'}), 404
+
+    # Get products from matcher
+    products = []
+    if matcher:
+        products = matcher.get_products_for_influencer(name)
+
+    try:
+        analysis = ai.analyze_profile(dict(profile), products)
+        return jsonify({'analysis': analysis})
     except AINotConfiguredError as e:
         return jsonify({'error': str(e)}), 400
     except Exception as e:

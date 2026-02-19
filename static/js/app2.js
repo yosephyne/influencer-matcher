@@ -244,6 +244,7 @@ async function loadProfiles() {
         allProfiles = await response.json();
         renderProfileList(allProfiles);
         populateProfileAutocomplete();
+        loadTagSuggestions();
     } catch (error) {
         document.getElementById('profileList').innerHTML =
             `<div class="error">Fehler: ${error.message}</div>`;
@@ -252,10 +253,13 @@ async function loadProfiles() {
 
 function filterProfiles() {
     const query = document.getElementById('profileSearchInput').value.toLowerCase();
-    const filtered = allProfiles.filter(p =>
-        (p.name || '').toLowerCase().includes(query) ||
-        (p.display_name || '').toLowerCase().includes(query)
-    );
+    const tagFilter = (document.getElementById('tagFilter') || {}).value || '';
+    const filtered = allProfiles.filter(p => {
+        const nameMatch = (p.name || '').toLowerCase().includes(query) ||
+            (p.display_name || '').toLowerCase().includes(query);
+        const tagMatch = !tagFilter || (p.tags && p.tags.includes(tagFilter));
+        return nameMatch && tagMatch;
+    });
     renderProfileList(filtered);
 }
 
@@ -277,6 +281,14 @@ function sortProfiles(field) {
     renderProfileList(allProfiles);
 }
 
+function getEffectiveRating(p, field) {
+    // Manual rating (if > 0) takes priority over auto
+    const autoField = 'auto_' + field;
+    const manual = p[field] || 0;
+    const auto = p[autoField] || 0;
+    return manual > 0 ? manual : auto;
+}
+
 function renderProfileList(profiles) {
     const container = document.getElementById('profileList');
     if (!profiles.length) {
@@ -291,8 +303,8 @@ function renderProfileList(profiles) {
             valA = (a.display_name || a.name || '').toLowerCase();
             valB = (b.display_name || b.name || '').toLowerCase();
         } else if (profileSortField === 'rating') {
-            valA = ((a.rating_reliability || 0) + (a.rating_content_quality || 0) + (a.rating_communication || 0)) / 3;
-            valB = ((b.rating_reliability || 0) + (b.rating_content_quality || 0) + (b.rating_communication || 0)) / 3;
+            valA = (getEffectiveRating(a, 'rating_reliability') + getEffectiveRating(a, 'rating_content_quality') + getEffectiveRating(a, 'rating_communication')) / 3;
+            valB = (getEffectiveRating(b, 'rating_reliability') + getEffectiveRating(b, 'rating_content_quality') + getEffectiveRating(b, 'rating_communication')) / 3;
         } else if (profileSortField === 'products') {
             valA = a.product_count || 0;
             valB = b.product_count || 0;
@@ -304,18 +316,26 @@ function renderProfileList(profiles) {
 
     container.innerHTML = sorted.map(p => {
         const avgRating = Math.round(
-            ((p.rating_reliability || 0) + (p.rating_content_quality || 0) + (p.rating_communication || 0)) / 3
+            (getEffectiveRating(p, 'rating_reliability') + getEffectiveRating(p, 'rating_content_quality') + getEffectiveRating(p, 'rating_communication')) / 3
         );
         const stars = avgRating > 0 ? '&#9733;'.repeat(avgRating) + '&#9734;'.repeat(5 - avgRating) : '&#9734;&#9734;&#9734;&#9734;&#9734;';
         const isActive = p.name === currentProfileName ? ' active' : '';
+        const tagDots = (p.tags || []).slice(0, 3).map(t => `<span class="tag-dot" title="${t}" style="background:${tagColor(t)}"></span>`).join('');
         return `
             <div class="profile-row${isActive}" onclick="openProfile('${p.name.replace(/'/g, "\\'")}')">
-                <div class="profile-row-name">${p.display_name || p.name}</div>
+                <div class="profile-row-name">${p.display_name || p.name}${tagDots ? '<span class="tag-dots">' + tagDots + '</span>' : ''}</div>
                 <div class="profile-row-stars">${stars}</div>
                 <div class="profile-row-count">${p.product_count || 0}</div>
             </div>
         `;
     }).join('');
+}
+
+function tagColor(tag) {
+    const colors = ['#8a4da6', '#f29184', '#efc15f', '#10B981', '#6366F1', '#EC4899', '#F59E0B', '#3B82F6', '#14B8A6', '#F97316'];
+    let hash = 0;
+    for (let i = 0; i < tag.length; i++) hash = tag.charCodeAt(i) + ((hash << 5) - hash);
+    return colors[Math.abs(hash) % colors.length];
 }
 
 async function openProfile(name) {
@@ -325,6 +345,11 @@ async function openProfile(name) {
 
     placeholder.style.display = 'none';
     detailSection.style.display = 'block';
+
+    // On mobile: scroll to detail section
+    if (window.innerWidth <= 768) {
+        detailSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
 
     // Highlight active row in list
     document.querySelectorAll('.profile-row').forEach(row => row.classList.remove('active'));
@@ -341,7 +366,7 @@ async function openProfile(name) {
         document.getElementById('profileDetailName').textContent = profile.display_name || profile.name;
         document.getElementById('profileDetailCount').textContent = `${profile.product_count} Produkte`;
 
-        // Avatar (initials with deterministic color, or photo if available)
+        // Avatar (photo > notion icon > instagram avatar > initials)
         const avatarDiv = document.getElementById('profileAvatar');
         const displayName = profile.display_name || profile.name;
         const initials = displayName.split(/\s+/).map(w => w[0]).join('').substring(0, 2).toUpperCase();
@@ -349,15 +374,38 @@ async function openProfile(name) {
         let hash = 0;
         for (let i = 0; i < displayName.length; i++) hash = displayName.charCodeAt(i) + ((hash << 5) - hash);
         const colorIdx = Math.abs(hash) % avatarColors.length;
+        const fallbackInitials = () => { avatarDiv.textContent = initials; avatarDiv.style.backgroundColor = avatarColors[colorIdx]; };
+        const igHandle = (profile.instagram_handle || '').replace(/^@/, '');
 
         if (profile.profile_photo) {
             avatarDiv.innerHTML = `<img src="/api/profiles/${encodeURIComponent(profile.name)}/photo" alt="${initials}">`;
             avatarDiv.style.backgroundColor = 'transparent';
+        } else if (profile.notion_icon_url) {
+            avatarDiv.innerHTML = `<img src="${profile.notion_icon_url}" alt="${initials}">`;
+            avatarDiv.style.backgroundColor = 'transparent';
+            avatarDiv.querySelector('img').onerror = function() {
+                if (igHandle) {
+                    this.onerror = function() { fallbackInitials(); };
+                    this.src = `https://unavatar.io/instagram/${igHandle}`;
+                } else { fallbackInitials(); }
+            };
+        } else if (igHandle) {
+            avatarDiv.innerHTML = `<img src="https://unavatar.io/instagram/${igHandle}" alt="${initials}">`;
+            avatarDiv.style.backgroundColor = 'transparent';
+            avatarDiv.querySelector('img').onerror = function() { fallbackInitials(); };
         } else {
-            avatarDiv.textContent = initials;
-            avatarDiv.innerHTML = initials;
-            avatarDiv.style.backgroundColor = avatarColors[colorIdx];
+            fallbackInitials();
         }
+
+        // AI Analysis button visibility
+        const aiBtn = document.getElementById('aiAnalysisBtn');
+        const aiResult = document.getElementById('aiAnalysisResult');
+        if (aiBtn) {
+            aiBtn.style.display = profile.ai_configured ? '' : 'none';
+            aiBtn.textContent = 'KI-Analyse';
+            aiBtn.disabled = false;
+        }
+        if (aiResult) aiResult.style.display = 'none';
 
         // Instagram link
         const igLink = document.getElementById('profileInstagram');
@@ -371,10 +419,26 @@ async function openProfile(name) {
             igLink.style.display = 'none';
         }
 
-        // Render stars
-        renderStars('stars-reliability', profile.rating_reliability || 0, 'rating_reliability');
-        renderStars('stars-content', profile.rating_content_quality || 0, 'rating_content_quality');
-        renderStars('stars-communication', profile.rating_communication || 0, 'rating_communication');
+        // Email address
+        const emailLink = document.getElementById('profileEmail');
+        if (profile.email) {
+            emailLink.href = `mailto:${profile.email}`;
+            emailLink.textContent = profile.email;
+            emailLink.style.display = '';
+        } else {
+            emailLink.style.display = 'none';
+        }
+
+        // Tags
+        renderProfileTags(profile);
+
+        // Render smart stars (auto vs manual)
+        renderSmartStars('stars-reliability', 'badge-reliability', 'reset-reliability',
+            profile.rating_reliability || 0, profile.auto_rating_reliability || 0, 'rating_reliability');
+        renderSmartStars('stars-content', 'badge-content', 'reset-content',
+            profile.rating_content_quality || 0, profile.auto_rating_content_quality || 0, 'rating_content_quality');
+        renderSmartStars('stars-communication', 'badge-communication', 'reset-communication',
+            profile.rating_communication || 0, profile.auto_rating_communication || 0, 'rating_communication');
 
         // Notes
         document.getElementById('profileNotes').value = profile.notes || '';
@@ -394,7 +458,7 @@ async function openProfile(name) {
 
         // Notion data
         const notionDiv = document.getElementById('profileNotionData');
-        const emailDiv = document.getElementById('profileEmailDraft');
+        const emailDraftDiv = document.getElementById('profileEmailDraft');
         const collabDiv = document.getElementById('profileCollabHistory');
 
         if (profile.notion_page_id) {
@@ -405,32 +469,34 @@ async function openProfile(name) {
             document.getElementById('profileNotionFollower').textContent =
                 profile.notion_follower ? Number(profile.notion_follower).toLocaleString('de-DE') + ' Follower' : '';
             document.getElementById('profileNotionProdukt').textContent = profile.notion_produkt || '';
-            const notionLink = document.getElementById('profileNotionLink');
-            notionLink.href = `https://www.notion.so/${profile.notion_page_id.replace(/-/g, '')}`;
 
-            // Show collab history section with load button
-            collabDiv.style.display = 'block';
-            document.getElementById('collabHistoryContent').innerHTML = '';
-            document.getElementById('loadCollabBtn').style.display = '';
-            document.getElementById('loadCollabBtn').disabled = false;
-            document.getElementById('loadCollabBtn').textContent = 'Zusaetzliche Notion-Daten laden';
+            // Auto-loaded collab history (no button needed)
+            if (profile.collab_history) {
+                collabDiv.style.display = 'block';
+                document.getElementById('collabHistoryContent').innerHTML =
+                    `<div class="collab-history-content">${marked.parse(profile.collab_history)}</div>`;
+            } else {
+                collabDiv.style.display = 'none';
+            }
 
-            // Show email draft section with load button
-            emailDiv.style.display = 'block';
-            document.getElementById('emailDraftContent').innerHTML = '';
-            document.getElementById('loadEmailBtn').style.display = '';
-            document.getElementById('loadEmailBtn').disabled = false;
-            document.getElementById('loadEmailBtn').textContent = 'E-Mail-Entwurf laden';
+            // Auto-loaded email draft (no button needed)
+            if (profile.email_draft) {
+                emailDraftDiv.style.display = 'block';
+                document.getElementById('emailDraftContent').innerHTML =
+                    `<div class="email-draft-content">${marked.parse(profile.email_draft)}</div>`;
+            } else {
+                emailDraftDiv.style.display = 'none';
+            }
         } else if (notionConnected) {
             notionDiv.style.display = 'block';
             notionDiv.innerHTML = '<h3>Notion-Daten</h3><p class="no-data">Kein Notion-Eintrag verknuepft. ' +
                 '<a href="#" onclick="switchMainTab(\'settings\'); return false;" style="color: var(--primary-light);">In Einstellungen synchronisieren</a></p>';
             collabDiv.style.display = 'none';
-            emailDiv.style.display = 'none';
+            emailDraftDiv.style.display = 'none';
         } else {
             notionDiv.style.display = 'none';
             collabDiv.style.display = 'none';
-            emailDiv.style.display = 'none';
+            emailDraftDiv.style.display = 'none';
         }
 
         // Re-render list to update active highlight
@@ -453,6 +519,121 @@ function renderStars(containerId, currentValue, field) {
         star.innerHTML = '&#9733;';
         star.addEventListener('click', () => setRating(field, i));
         container.appendChild(star);
+    }
+}
+
+function renderSmartStars(starsId, badgeId, resetId, manualValue, autoValue, field) {
+    const isManual = manualValue > 0;
+    const displayValue = isManual ? manualValue : autoValue;
+
+    renderStars(starsId, displayValue, field);
+
+    const badge = document.getElementById(badgeId);
+    if (badge) {
+        if (isManual) {
+            badge.textContent = 'manuell';
+            badge.className = 'rating-badge rating-badge-manual';
+        } else if (autoValue > 0) {
+            badge.textContent = 'auto';
+            badge.className = 'rating-badge rating-badge-auto';
+        } else {
+            badge.textContent = '';
+            badge.className = 'rating-badge';
+        }
+    }
+
+    const resetBtn = document.getElementById(resetId);
+    if (resetBtn) {
+        resetBtn.style.display = isManual ? '' : 'none';
+    }
+}
+
+async function resetRating(field) {
+    if (!currentProfileName) return;
+    try {
+        await fetch(`/api/profiles/${encodeURIComponent(currentProfileName)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ [field]: 0 })
+        });
+        openProfile(currentProfileName);
+        loadProfiles();
+    } catch (error) {
+        showToast('Fehler beim Zuruecksetzen', 'error');
+    }
+}
+
+// --- Tags ---
+
+function renderProfileTags(profile) {
+    const section = document.getElementById('profileTags');
+    const list = document.getElementById('profileTagsList');
+    const tags = profile.tags || [];
+
+    section.style.display = 'block';
+    list.innerHTML = tags.map(tag =>
+        `<span class="tag-chip" style="background:${tagColor(tag)}30; color:${tagColor(tag)}; border-color:${tagColor(tag)}40;">
+            ${tag}
+            <span class="tag-remove" onclick="removeTag('${tag.replace(/'/g, "\\'")}')">&times;</span>
+        </span>`
+    ).join('') || '<span class="no-tags">Keine Tags</span>';
+
+    // Load tag suggestions
+    loadTagSuggestions();
+}
+
+async function loadTagSuggestions() {
+    try {
+        const response = await fetch('/api/tags');
+        const tags = await response.json();
+        const datalist = document.getElementById('tagSuggestions');
+        if (datalist) {
+            datalist.innerHTML = tags.map(t => `<option value="${t}">`).join('');
+        }
+        // Also update the filter dropdown
+        const filter = document.getElementById('tagFilter');
+        if (filter) {
+            const currentVal = filter.value;
+            filter.innerHTML = '<option value="">Alle Tags</option>' +
+                tags.map(t => `<option value="${t}"${t === currentVal ? ' selected' : ''}>${t}</option>`).join('');
+        }
+    } catch (error) {
+        console.error('Failed to load tags:', error);
+    }
+}
+
+async function addTagFromInput() {
+    if (!currentProfileName) return;
+    const input = document.getElementById('tagInput');
+    const tag = input.value.trim();
+    if (!tag) return;
+
+    try {
+        await fetch(`/api/profiles/${encodeURIComponent(currentProfileName)}/tags`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'add', tag })
+        });
+        input.value = '';
+        openProfile(currentProfileName);
+        loadProfiles();
+    } catch (error) {
+        showToast('Tag konnte nicht hinzugefuegt werden', 'error');
+    }
+}
+
+async function removeTag(tag) {
+    if (!currentProfileName) return;
+    try {
+        await fetch(`/api/profiles/${encodeURIComponent(currentProfileName)}/tags`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'remove', tag })
+        });
+        openProfile(currentProfileName);
+        loadProfiles();
+    } catch (error) {
+        showToast('Tag konnte nicht entfernt werden', 'error');
     }
 }
 
@@ -481,16 +662,35 @@ async function setRating(field, value) {
 async function saveProfileNotes() {
     if (!currentProfileName) return;
     const notes = document.getElementById('profileNotes').value;
+    const hint = document.getElementById('notionSyncHint');
+    const btn = document.querySelector('#profileDetail .btn-primary.btn-small');
+    if (btn) { btn.textContent = 'Speichert...'; btn.disabled = true; }
 
     try {
-        await fetch(`/api/profiles/${encodeURIComponent(currentProfileName)}`, {
+        const url = `/api/profiles/${encodeURIComponent(currentProfileName)}`;
+        console.log('[Notes] Saving to:', url, 'notes:', notes);
+        const response = await fetch(url, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ notes })
         });
-        showToast('Notizen gespeichert', 'success');
+        console.log('[Notes] Response status:', response.status);
+        const data = await response.json();
+        console.log('[Notes] Response data:', JSON.stringify(data));
+        if (data.notion_synced) {
+            showToast('In Notion gespeichert!', 'success');
+            if (hint) { hint.textContent = 'Notion OK'; hint.style.display = ''; }
+        } else if (data.notion_error) {
+            showToast('Notion-Fehler: ' + data.notion_error, 'error');
+        } else {
+            showToast('Gespeichert (kein Notion-Profil)', 'success');
+            if (hint) hint.style.display = 'none';
+        }
     } catch (error) {
-        showToast('Speichern fehlgeschlagen', 'error');
+        console.error('[Notes] Error:', error);
+        showToast('Speichern fehlgeschlagen: ' + error.message, 'error');
+    } finally {
+        if (btn) { btn.textContent = 'Notizen speichern'; btn.disabled = false; }
     }
 }
 
@@ -521,6 +721,49 @@ async function uploadProfilePhoto() {
         showToast('Upload fehlgeschlagen: ' + error.message, 'error');
     }
     input.value = '';
+}
+
+// --- AI Profile Analysis ---
+
+async function generateProfileAnalysis() {
+    if (!currentProfileName) return;
+    const btn = document.getElementById('aiAnalysisBtn');
+    const resultDiv = document.getElementById('aiAnalysisResult');
+
+    btn.textContent = 'KI denkt nach...';
+    btn.disabled = true;
+
+    try {
+        const response = await fetch(`/api/profiles/${encodeURIComponent(currentProfileName)}/ai-analysis`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+        });
+
+        const data = await response.json();
+
+        if (data.error) {
+            showToast(data.error, 'error');
+            return;
+        }
+
+        resultDiv.style.display = 'block';
+        resultDiv.innerHTML = `
+            <div class="ai-explanation-content">
+                <strong>KI-Profil-Analyse:</strong>
+                <div class="ai-typewriter"></div>
+            </div>
+        `;
+
+        await typewriterEffect(
+            resultDiv.querySelector('.ai-typewriter'),
+            data.analysis
+        );
+    } catch (error) {
+        showToast('KI-Fehler: ' + error.message, 'error');
+    } finally {
+        btn.textContent = 'KI-Analyse';
+        btn.disabled = false;
+    }
 }
 
 // --- Products Tab ---
@@ -721,75 +964,8 @@ async function autoSyncNotion() {
     }
 }
 
-// --- Email Draft (on-demand from Notion) ---
-
-async function loadEmailDraft() {
-    if (!currentProfileName) return;
-
-    const btn = document.getElementById('loadEmailBtn');
-    const contentDiv = document.getElementById('emailDraftContent');
-    btn.disabled = true;
-    btn.textContent = 'Wird geladen...';
-
-    try {
-        const response = await fetch(
-            `/api/profiles/${encodeURIComponent(currentProfileName)}/notion`
-        );
-        const data = await response.json();
-
-        if (data.error) {
-            contentDiv.innerHTML = `<div class="error">${data.error}</div>`;
-            return;
-        }
-
-        if (data.email_draft) {
-            contentDiv.innerHTML = `<div class="email-draft-content">${marked.parse(data.email_draft)}</div>`;
-            btn.style.display = 'none';
-        } else {
-            contentDiv.innerHTML = '<p class="no-data">Kein E-Mail-Entwurf vorhanden</p>';
-        }
-    } catch (error) {
-        contentDiv.innerHTML = `<div class="error">Fehler: ${error.message}</div>`;
-    } finally {
-        btn.disabled = false;
-        btn.textContent = 'E-Mail-Entwurf laden';
-    }
-}
-
-// --- Collab History (on-demand from Notion) ---
-
-async function loadCollabHistory() {
-    if (!currentProfileName) return;
-
-    const btn = document.getElementById('loadCollabBtn');
-    const contentDiv = document.getElementById('collabHistoryContent');
-    btn.disabled = true;
-    btn.textContent = 'Wird geladen...';
-
-    try {
-        const response = await fetch(
-            `/api/profiles/${encodeURIComponent(currentProfileName)}/notion`
-        );
-        const data = await response.json();
-
-        if (data.error) {
-            contentDiv.innerHTML = `<div class="error">${data.error}</div>`;
-            return;
-        }
-
-        if (data.collab_history) {
-            contentDiv.innerHTML = `<div class="collab-history-content">${marked.parse(data.collab_history)}</div>`;
-            btn.style.display = 'none';
-        } else {
-            contentDiv.innerHTML = '<p class="no-data">Keine Kollaborations-Daten vorhanden</p>';
-        }
-    } catch (error) {
-        contentDiv.innerHTML = `<div class="error">Fehler: ${error.message}</div>`;
-    } finally {
-        btn.disabled = false;
-        btn.textContent = 'Zusaetzliche Notion-Daten laden';
-    }
-}
+// Email draft and collab history are now auto-loaded in openProfile() via the profile GET endpoint.
+// No separate on-demand load functions needed.
 
 // --- AI Explain Match ---
 
@@ -1205,4 +1381,8 @@ document.getElementById('verifySingleName')?.addEventListener('keypress', functi
 
 document.getElementById('verifySingleProduct')?.addEventListener('keypress', function(e) {
     if (e.key === 'Enter') verifySingle();
+});
+
+document.getElementById('tagInput')?.addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') { e.preventDefault(); addTagFromInput(); }
 });

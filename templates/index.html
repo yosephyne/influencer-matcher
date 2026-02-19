@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v={{ range(1000,9999) | random }}">
 </head>
 <body>
     <div class="container">
@@ -58,6 +58,11 @@
                             <input type="text" id="profileSearchInput" placeholder="Name suchen..." class="input-field" oninput="filterProfiles()" list="profileNamesList">
                         </div>
                         <datalist id="profileNamesList"></datalist>
+                        <div class="tag-filter-box">
+                            <select id="tagFilter" class="input-field tag-filter-select" onchange="filterProfiles()">
+                                <option value="">Alle Tags</option>
+                            </select>
+                        </div>
 
                         <!-- Sortable column headers -->
                         <div class="list-header">
@@ -90,22 +95,39 @@
                             <div class="profile-header-info">
                                 <h2 id="profileDetailName"></h2>
                                 <a id="profileInstagram" href="#" target="_blank" class="profile-instagram" style="display: none;"></a>
+                                <a id="profileEmail" href="#" class="profile-email" style="display: none;"></a>
                                 <span class="profile-product-count" id="profileDetailCount"></span>
+                            </div>
+                        </div>
+
+                        <!-- Tags -->
+                        <div id="profileTags" class="profile-tags-section" style="display: none;">
+                            <div id="profileTagsList" class="tag-chips"></div>
+                            <div class="tag-input-wrapper">
+                                <input type="text" id="tagInput" class="input-field tag-input" placeholder="Tag hinzufuegen..." list="tagSuggestions">
+                                <datalist id="tagSuggestions"></datalist>
+                                <button class="btn btn-small btn-primary" onclick="addTagFromInput()">+</button>
                             </div>
                         </div>
 
                         <div class="rating-section">
                             <div class="rating-row">
-                                <label>Zuverlaessigkeit</label>
+                                <label>Produkt-Erfahrung</label>
                                 <div class="star-rating" data-field="rating_reliability" id="stars-reliability"></div>
+                                <span class="rating-badge" id="badge-reliability"></span>
+                                <button class="btn-reset-rating" id="reset-reliability" onclick="resetRating('rating_reliability')" title="Auf Auto zuruecksetzen" style="display:none;">&#x21ba;</button>
                             </div>
                             <div class="rating-row">
-                                <label>Content-Qualitaet</label>
+                                <label>Reichweite</label>
                                 <div class="star-rating" data-field="rating_content_quality" id="stars-content"></div>
+                                <span class="rating-badge" id="badge-content"></span>
+                                <button class="btn-reset-rating" id="reset-content" onclick="resetRating('rating_content_quality')" title="Auf Auto zuruecksetzen" style="display:none;">&#x21ba;</button>
                             </div>
                             <div class="rating-row">
-                                <label>Kommunikation</label>
+                                <label>Kooperations-Status</label>
                                 <div class="star-rating" data-field="rating_communication" id="stars-communication"></div>
+                                <span class="rating-badge" id="badge-communication"></span>
+                                <button class="btn-reset-rating" id="reset-communication" onclick="resetRating('rating_communication')" title="Auf Auto zuruecksetzen" style="display:none;">&#x21ba;</button>
                             </div>
                         </div>
 
@@ -113,9 +135,16 @@
                             <label>Notizen</label>
                             <textarea id="profileNotes" class="input-field profile-notes" placeholder="Notizen zu diesem Influencer..." rows="3"></textarea>
                             <button class="btn btn-primary btn-small" onclick="saveProfileNotes()">Notizen speichern</button>
+                            <span id="notionSyncHint" class="notion-sync-hint" style="display:none;"></span>
                         </div>
 
                         <div id="profileProducts" class="profile-products"></div>
+
+                        <!-- KI-Analyse -->
+                        <div id="profileAIAnalysis" class="profile-ai-section">
+                            <button id="aiAnalysisBtn" class="btn btn-ai btn-ai-profile" onclick="generateProfileAnalysis()">KI-Analyse</button>
+                            <div id="aiAnalysisResult" style="display: none;"></div>
+                        </div>
 
                         <!-- Notion Data (shown when available) -->
                         <div id="profileNotionData" style="display: none;">
@@ -124,25 +153,18 @@
                                 <span class="notion-badge" id="profileNotionStatus"></span>
                                 <span class="notion-follower" id="profileNotionFollower"></span>
                                 <span class="notion-produkt" id="profileNotionProdukt"></span>
-                                <a id="profileNotionLink" href="#" target="_blank" class="notion-link">In Notion oeffnen</a>
                             </div>
                         </div>
 
-                        <!-- Collab History (fetched on-demand from Notion) -->
+                        <!-- Collab History (auto-loaded from profile GET) -->
                         <div id="profileCollabHistory" style="display: none;">
                             <h3>Kollaborations-Historie</h3>
-                            <button class="btn btn-small btn-secondary" onclick="loadCollabHistory()" id="loadCollabBtn">
-                                Zusaetzliche Notion-Daten laden
-                            </button>
                             <div id="collabHistoryContent" class="collab-history-box"></div>
                         </div>
 
-                        <!-- Email Draft (fetched on-demand from Notion) -->
+                        <!-- Email Draft (auto-loaded from profile GET) -->
                         <div id="profileEmailDraft" style="display: none;">
                             <h3>E-Mail-Entwurf</h3>
-                            <button class="btn btn-small btn-secondary" onclick="loadEmailDraft()" id="loadEmailBtn">
-                                E-Mail-Entwurf laden
-                            </button>
                             <div id="emailDraftContent" class="email-draft-box"></div>
                         </div>
                     </section>
@@ -388,6 +410,6 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/app2.js') }}"></script>
 </body>
 </html>

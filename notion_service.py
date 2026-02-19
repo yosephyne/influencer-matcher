@@ -187,9 +187,20 @@ class NotionService:
     def _parse_properties(self, page):
         """Convert Notion page properties into a flat dict."""
         props = page.get('properties', {})
-        return {
+        # Extract page icon URL (profile picture)
+        icon_url = ''
+        icon_data = page.get('icon', {})
+        if icon_data:
+            icon_type = icon_data.get('type', '')
+            if icon_type == 'external':
+                icon_url = icon_data.get('external', {}).get('url', '')
+            elif icon_type == 'file':
+                icon_url = icon_data.get('file', {}).get('url', '')
+
+        entry = {
             'notion_page_id': page['id'],
             'notion_url': page.get('url', ''),
+            'icon_url': icon_url,
             'name': self._get_title(props.get('Name', {})),
             'follower': self._get_number(props.get('Follower', {})),
             'instagram': self._get_rich_text(props.get('Instagram', {})),
@@ -204,7 +215,24 @@ class NotionService:
             'mapping_verifiziert': self._get_checkbox(props.get('Mapping verifiziert', {})),
             'hinweis': self._get_rich_text(props.get('Hinweis', {})),
             'extra_info': self._get_rich_text(props.get('Extra Info', {})),
+            'matcher_notiz': self._get_rich_text(props.get('Matcher-Notiz', {})),
         }
+
+        # Try to extract email address from various properties
+        email = (self._get_email(props.get('E-Mail', {}))
+                 or self._get_email(props.get('Email', {}))
+                 or self._get_rich_text(props.get('E-Mail', {}))
+                 or self._get_rich_text(props.get('Email', {})))
+        if not email:
+            # Fallback: regex in hinweis and extra_info
+            for field in (entry.get('hinweis', ''), entry.get('extra_info', '')):
+                m = re.search(r'[\w.+-]+@[\w-]+\.[\w.-]+', field)
+                if m:
+                    email = m.group(0)
+                    break
+        entry['email'] = email or ''
+
+        return entry
 
     def _get_title(self, prop):
         items = prop.get('title', [])
@@ -223,6 +251,95 @@ class NotionService:
 
     def _get_checkbox(self, prop):
         return prop.get('checkbox', False)
+
+    def _get_email(self, prop):
+        """Extract email from a Notion email-type property."""
+        return prop.get('email', '') or ''
+
+    # --- Writing to Notion ---
+
+    def add_comment(self, page_id, text):
+        """Add a comment to a Notion page (used for syncing notes)."""
+        token = self.get_token()
+        if not token:
+            raise RuntimeError('Notion nicht verbunden')
+
+        prefixed = f'[Influencer Matcher] {text}'
+        resp = http_requests.post(
+            f'{NOTION_API_BASE}/comments',
+            headers=self._headers(token),
+            json={
+                'parent': {'page_id': page_id},
+                'rich_text': [{'text': {'content': prefixed[:2000]}}],
+            },
+            timeout=10,
+        )
+        resp.raise_for_status()
+        return True
+
+    def _ensure_db_property(self, property_name, prop_type='rich_text'):
+        """Ensure a property exists on the Notion database. Creates it if missing."""
+        if not hasattr(self, '_known_properties'):
+            self._known_properties = set()
+        if property_name in self._known_properties:
+            return
+
+        token = self.get_token()
+        if not token:
+            return
+        resp = http_requests.patch(
+            f'{NOTION_API_BASE}/databases/{NOTION_DATABASE_ID}',
+            headers=self._headers(token),
+            json={'properties': {property_name: {prop_type: {}}}},
+            timeout=10,
+        )
+        if resp.status_code == 200:
+            self._known_properties.add(property_name)
+
+    def update_property(self, page_id, property_name, value):
+        """Update a rich_text property on a Notion page.
+        Ensures the property exists on the database first.
+        """
+        token = self.get_token()
+        if not token:
+            raise RuntimeError('Notion nicht verbunden')
+
+        self._ensure_db_property(property_name)
+
+        resp = http_requests.patch(
+            f'{NOTION_API_BASE}/pages/{page_id}',
+            headers=self._headers(token),
+            json={
+                'properties': {
+                    property_name: {
+                        'rich_text': [{'text': {'content': value[:2000]}}] if value else []
+                    }
+                }
+            },
+            timeout=10,
+        )
+        resp.raise_for_status()
+        return True
+
+    def update_page_icon(self, page_id, icon_url):
+        """Set the icon of a Notion page to an external URL."""
+        token = self.get_token()
+        if not token:
+            raise RuntimeError('Notion nicht verbunden')
+
+        resp = http_requests.patch(
+            f'{NOTION_API_BASE}/pages/{page_id}',
+            headers=self._headers(token),
+            json={
+                'icon': {
+                    'type': 'external',
+                    'external': {'url': icon_url}
+                }
+            },
+            timeout=10,
+        )
+        resp.raise_for_status()
+        return True
 
     # --- Block → Text Conversion ---
 

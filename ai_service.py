@@ -197,6 +197,59 @@ class AIService:
         )
         return response.choices[0].message.content
 
+    def analyze_profile(self, profile, products):
+        """AI generates a comprehensive profile analysis.
+        Returns analysis text (German).
+        """
+        kwargs = self._get_completion_kwargs()
+
+        system_prompt = (
+            "Du bist ein Experte fuer Influencer-Marketing bei goodmoodfood, "
+            "einer deutschen Marke fuer Rohkakao, Vitalpilze und Superfoods. "
+            "Erstelle eine kurze, praxisnahe Analyse (5-8 Saetze) dieses Influencer-Profils. "
+            "Beruecksichtige Produkt-Historie, Follower-Zahl, Kooperationsstatus und Tags. "
+            "Gib konkrete Empfehlungen fuer die zukuenftige Zusammenarbeit. Antworte auf Deutsch."
+        )
+
+        products_text = ', '.join(products) if products else 'Keine bisherigen Kollaborationen'
+        follower = profile.get('notion_follower', 0) or 0
+        status = profile.get('notion_status', '') or 'unbekannt'
+        kontakt = profile.get('notion_kontakt', '') or 'unbekannt'
+        rolle = profile.get('notion_rolle', '') or 'unbekannt'
+        tags_raw = profile.get('tags', '[]')
+        if isinstance(tags_raw, str):
+            import json
+            try:
+                tags = json.loads(tags_raw)
+            except (json.JSONDecodeError, TypeError):
+                tags = []
+        else:
+            tags = tags_raw
+        tags_text = ', '.join(tags) if tags else 'keine'
+
+        user_prompt = (
+            f"Influencer: {profile.get('display_name') or profile.get('name', 'Unbekannt')}\n"
+            f"Bisherige Produkte: {products_text}\n"
+            f"Anzahl Produkte: {len(products)}\n"
+            f"Follower: {follower:,}\n"
+            f"Status: {status}\n"
+            f"Kontakt: {kontakt}\n"
+            f"Rolle: {rolle}\n"
+            f"Tags: {tags_text}\n\n"
+            f"Analysiere dieses Profil und gib Empfehlungen fuer die Zusammenarbeit."
+        )
+
+        response = completion(
+            **kwargs,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            max_tokens=600,
+            temperature=0.7,
+        )
+        return response.choices[0].message.content
+
     def suggest_products(self, influencer_name, products, all_products):
         """Phase 2: AI recommends best products for an influencer."""
         raise NotImplementedError("Kommt in Phase 2")

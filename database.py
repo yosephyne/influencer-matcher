@@ -74,6 +74,11 @@ class Database:
             ("influencer_profiles", "notion_follower", "INTEGER DEFAULT 0"),
             ("influencer_profiles", "notion_synced_at", "TEXT DEFAULT ''"),
             ("influencer_profiles", "profile_photo", "TEXT DEFAULT ''"),
+            ("influencer_profiles", "email", "TEXT DEFAULT ''"),
+            ("influencer_profiles", "tags", "TEXT DEFAULT '[]'"),
+            ("influencer_profiles", "notion_kontakt", "TEXT DEFAULT ''"),
+            ("influencer_profiles", "notion_rolle", "TEXT DEFAULT ''"),
+            ("influencer_profiles", "notion_icon_url", "TEXT DEFAULT ''"),
         ]
         for table, col, col_type in migration_columns:
             try:
@@ -218,18 +223,43 @@ class Database:
     # --- Notion Data ---
 
     def update_notion_data(self, name, notion_page_id, notion_status='',
-                           notion_produkt='', notion_follower=0):
+                           notion_produkt='', notion_follower=0,
+                           notion_kontakt='', notion_rolle='', email='',
+                           icon_url=''):
         """Update Notion-specific fields for a profile."""
         conn = self._get_connection()
         conn.execute("""
             UPDATE influencer_profiles
             SET notion_page_id = ?, notion_status = ?, notion_produkt = ?,
-                notion_follower = ?, notion_synced_at = datetime('now'),
+                notion_follower = ?, notion_kontakt = ?, notion_rolle = ?,
+                notion_icon_url = ?,
+                notion_synced_at = datetime('now'),
                 updated_at = datetime('now')
             WHERE name = ?
-        """, (notion_page_id, notion_status, notion_produkt, notion_follower, name))
+        """, (notion_page_id, notion_status, notion_produkt, notion_follower,
+              notion_kontakt, notion_rolle, icon_url, name))
+        # Only overwrite email if Notion provides one
+        if email:
+            conn.execute("""
+                UPDATE influencer_profiles SET email = ?
+                WHERE name = ? AND (email IS NULL OR email = '')
+            """, (email, name))
         conn.commit()
         conn.close()
+
+    def get_all_tags(self):
+        """Return a sorted list of all unique tags used across all profiles."""
+        conn = self._get_connection()
+        rows = conn.execute("SELECT tags FROM influencer_profiles WHERE tags != '[]'").fetchall()
+        conn.close()
+        all_tags = set()
+        for row in rows:
+            try:
+                tags = json.loads(row['tags'])
+                all_tags.update(tags)
+            except (json.JSONDecodeError, TypeError):
+                pass
+        return sorted(all_tags)
 
     # --- Collaboration Log ---
 
