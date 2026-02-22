@@ -9,12 +9,15 @@ from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 from pathlib import Path
 import os
+import time
 import pandas as pd
 import socket
+import requests as http_requests
 from matcher import InfluencerMatcher
 from database import Database
 from ai_service import AIService, AINotConfiguredError
 from notion_service import NotionService
+import instaloader
 
 # Absolute base path — works for local dev and WSGI servers (e.g. PythonAnywhere)
 APP_ROOT = Path(__file__).parent.absolute()
@@ -40,6 +43,16 @@ matcher = None
 db = Database()
 ai = AIService(db)
 notion = NotionService(db)
+
+# Instaloader for Instagram profile picture downloads (anonymous, no login)
+_insta_loader = instaloader.Instaloader(
+    download_pictures=False, download_videos=False,
+    download_video_thumbnails=False, download_geotags=False,
+    download_comments=False, save_metadata=False, quiet=True,
+)
+
+# Known bad file sizes from previous unavatar.io downloads (Twitch icons, placeholders)
+_BAD_AVATAR_SIZES = {10264, 1506}
 
 
 DEFAULT_PASSWORD = 'goodmoodfood2025'
@@ -424,60 +437,34 @@ PRODUCT_CATEGORIES = {
     'Snacks': ['Cashew Cluster', 'Peru Butter Drops'],
 }
 
+PRODUCT_URLS = {
+    'Rohkakao Peru': 'https://www.goodmood-food.de/bio-rohkakao-drops-peru-500g/',
+    'Rohkakao Ecuador': 'https://www.goodmood-food.de/rohkakao-masse-drops-ecuador-1kg/',
+    'Rohkakao Criollo': 'https://www.goodmood-food.de/rohkakao-masse-fuer-kakaozeremonien/',
+    'Kakao Nibs': 'https://www.goodmood-food.de/rohkakao-nibs-bio-peru-500g/',
+    'Feel Good Kakao': 'https://www.goodmood-food.de/ritualkakao-mix-sinnliche-reise-190g/',
+    'Rise Up & Shine': 'https://www.goodmood-food.de/vitalpilz-kakao-rise-up-shine-180g/',
+    'Calm Down & Relax': 'https://www.goodmood-food.de/vitalpilz-kakao-calm-down-relax-180g/',
+    'The Wholy Bean': 'https://www.goodmood-food.de/the-wholy-bean-chocolate-bar/',
+    'SinnPhonie': 'https://www.goodmood-food.de/feel-good-kakao-sinnphonie-190g/',
+    'Queen Beans': 'https://www.goodmood-food.de/rohkakao-queen-beans-200g/',
+    'Reishi': 'https://www.goodmood-food.de/bio-vitalpilz-extrakt-reishi/',
+    'Lions Mane': 'https://www.goodmood-food.de/bio-vitalpilz-extrakt-hericium/',
+    'Cordyceps': 'https://www.goodmood-food.de/bio-vitalpilz-extrakt-cordyceps/',
+    'Chaga': 'https://www.goodmood-food.de/bio-vitalpilz-chaga-extrakt-kapseln/',
+    'Pure Power': 'https://www.goodmood-food.de/vitalpilz-kakao-pure-power-120g/',
+    'Vitalpilz Extrakte': 'https://www.goodmood-food.de/bio-vitalpilz-extrakt-komplex/',
+    'Vitalpilz Kakao': 'https://www.goodmood-food.de/vitalpilz-kakao-rise-up-shine-180g/',
+    'Coco Aminos': 'https://www.goodmood-food.de/coco-aminos-wuerzsauce-bio-fairtrade/',
+    'Ashwagandha': 'https://www.goodmood-food.de/bio-ashwagandha-extrakt/',
+    'Matcha': 'https://www.goodmood-food.de/bio-matcha-japan/',
+    'Chlorella': 'https://www.goodmood-food.de/superfood-kaufen/',
+    'Maca': 'https://www.goodmood-food.de/maca-pulver-1-kg/',
+    'Lucuma': 'https://www.goodmood-food.de/superfood-kaufen/',
+    'Cashew Cluster': 'https://www.goodmood-food.de/bio-rohkakao-cashew-cluster-100g-gmf/',
+    'Peru Butter Drops': 'https://www.goodmood-food.de/bio-rohkakao-butter-drops-peru-500g/',
+}
 
-def compute_auto_ratings(profile, product_count):
-    """Compute data-driven star ratings (1-5) from available data."""
-    # 1) Produkt-Erfahrung: based on product count
-    if product_count >= 6:
-        r_experience = 5
-    elif product_count >= 4:
-        r_experience = 4
-    elif product_count >= 3:
-        r_experience = 3
-    elif product_count >= 2:
-        r_experience = 2
-    elif product_count >= 1:
-        r_experience = 1
-    else:
-        r_experience = 0
-
-    # 2) Reichweite: based on follower count
-    followers = profile.get('notion_follower', 0) or 0
-    if followers >= 100000:
-        r_reach = 5
-    elif followers >= 25000:
-        r_reach = 4
-    elif followers >= 5000:
-        r_reach = 3
-    elif followers >= 1000:
-        r_reach = 2
-    elif followers > 0:
-        r_reach = 1
-    else:
-        r_reach = 0
-
-    # 3) Kooperations-Status: based on kontakt + status fields
-    kontakt = (profile.get('notion_kontakt', '') or '').lower()
-    status = (profile.get('notion_status', '') or '').lower()
-
-    r_status = 0
-    # Map known status values to ratings
-    status_map = {
-        'abgeschlossen': 5, 'done': 5, 'versendet': 5,
-        'zugesagt': 4, 'agreed': 4, 'kooperation': 4,
-        'in verhandlung': 3, 'negotiation': 3, 'in bearbeitung': 3,
-        'antwort': 2, 'antwort erhalten': 2, 'replied': 2,
-        'angeschrieben': 1, 'kontaktiert': 1, 'gesendet': 1,
-    }
-    for key, val in status_map.items():
-        if key in kontakt or key in status:
-            r_status = max(r_status, val)
-
-    return {
-        'auto_rating_reliability': r_experience,
-        'auto_rating_content_quality': r_reach,
-        'auto_rating_communication': r_status,
-    }
 
 
 def _auto_tag_profile(name, notion_entry=None):
@@ -580,6 +567,55 @@ def disconnect_ai():
     return jsonify({'success': True})
 
 
+def _download_instagram_avatar(name, ig_handle):
+    """Download Instagram profile picture via Instaloader and save locally."""
+    try:
+        photos_dir = APP_ROOT / 'data' / 'photos'
+        photos_dir.mkdir(parents=True, exist_ok=True)
+        filename = secure_filename(name) + '.jpg'
+        filepath = photos_dir / filename
+
+        # Skip if file exists and is not a known-bad unavatar.io fallback
+        if filepath.exists():
+            file_size = filepath.stat().st_size
+            if file_size not in _BAD_AVATAR_SIZES:
+                return
+
+        # Fetch profile info via Instaloader (anonymous, no login)
+        profile = instaloader.Profile.from_username(_insta_loader.context, ig_handle)
+        pic_url = profile.profile_pic_url
+        if not pic_url:
+            print(f'[Avatar] No profile pic URL for {ig_handle}')
+            return
+
+        # Download the actual image from Instagram CDN
+        resp = http_requests.get(pic_url, timeout=15, allow_redirects=True)
+        content_type = resp.headers.get('Content-Type', '')
+        if resp.status_code != 200 or not content_type.startswith('image/'):
+            print(f'[Avatar] Bad response for {ig_handle}: status={resp.status_code}')
+            return
+
+        if len(resp.content) < 3000:
+            print(f'[Avatar] Suspiciously small image for {ig_handle}: {len(resp.content)} bytes')
+            return
+
+        filepath.write_bytes(resp.content)
+        db.upsert_profile(name, profile_photo=filename)
+        print(f'[Avatar] Downloaded: {filename} ({len(resp.content)} bytes)')
+
+    except instaloader.exceptions.ProfileNotExistsException:
+        print(f'[Avatar] Profile does not exist: {ig_handle}')
+    except instaloader.exceptions.LoginRequiredException:
+        print(f'[Avatar] Login required for {ig_handle} (private profile?)')
+    except instaloader.exceptions.ConnectionException as e:
+        if '429' in str(e):
+            print(f'[Avatar] Rate limited for {ig_handle}')
+            raise  # Let caller handle rate limit backoff
+        print(f'[Avatar] Connection error for {ig_handle}: {e}')
+    except Exception as e:
+        print(f'[Avatar] Error for {ig_handle}: {e}')
+
+
 # --- Notion Routes ---
 
 @app.route('/api/settings/notion', methods=['GET'])
@@ -675,6 +711,11 @@ def sync_notion():
             notion_rolle=entry.get('rolle', ''),
             email=entry.get('email', ''),
             icon_url=entry.get('icon_url', ''),
+            instagram_handle=entry.get('instagram', ''),
+            prio_alice=entry.get('prio_alice', ''),
+            website_link_1=entry.get('website_link_1', ''),
+            website_link_2=entry.get('website_link_2', ''),
+            cs_hinweis=entry.get('cs_hinweis', ''),
         )
 
         # Import Matcher-Notiz from Notion if local notes are empty
@@ -686,6 +727,24 @@ def sync_notion():
 
         # Auto-generate tags from Notion rolle + product categories
         _auto_tag_profile(target_name, entry)
+
+        # Download Instagram avatar (skip if valid local photo exists)
+        ig_handle = (entry.get('instagram', '') or '').lstrip('@')
+        if ig_handle:
+            profile = db.get_profile(target_name)
+            existing_photo = profile.get('profile_photo', '') if profile else ''
+            needs_download = not existing_photo
+            if existing_photo:
+                photo_path = APP_ROOT / 'data' / 'photos' / existing_photo
+                if photo_path.exists() and photo_path.stat().st_size in _BAD_AVATAR_SIZES:
+                    needs_download = True  # Re-download known-bad files
+            if needs_download:
+                try:
+                    _download_instagram_avatar(target_name, ig_handle)
+                    time.sleep(2)  # Respect Instagram rate limit
+                except Exception:
+                    time.sleep(5)  # Extra backoff on error
+
         synced += 1
 
     return jsonify({
@@ -723,9 +782,12 @@ def get_profile_notion(name):
 
 @app.route('/api/profiles', methods=['GET'])
 def get_profiles():
-    """Get all influencer profiles with product counts and auto-ratings."""
+    """Get all influencer profiles with product counts. Filtered by Prio Alice."""
     import json as _json
     profiles = db.get_all_profiles()
+
+    # Only show profiles that have a Prio Alice value
+    profiles = [p for p in profiles if p.get('prio_alice')]
 
     for p in profiles:
         if matcher:
@@ -733,10 +795,6 @@ def get_profiles():
             p['product_count'] = len(products)
         else:
             p['product_count'] = 0
-
-        # Auto-ratings for sorting/display in list
-        auto = compute_auto_ratings(p, p['product_count'])
-        p.update(auto)
 
         # Parse tags
         try:
@@ -757,17 +815,14 @@ def get_profile(name):
     if not profile:
         profile = db.upsert_profile(name, display_name=name)
 
-    # Add products from matcher
+    # Add products from matcher (with URLs)
     products = []
     if matcher:
-        products = matcher.get_products_for_influencer(name)
+        product_names = matcher.get_products_for_influencer(name)
+        products = [{'name': p, 'url': PRODUCT_URLS.get(p, '')} for p in product_names]
 
     profile['products'] = products
     profile['product_count'] = len(products)
-
-    # Compute auto-ratings from data
-    auto_ratings = compute_auto_ratings(profile, len(products))
-    profile.update(auto_ratings)
 
     # Parse tags from JSON string to list
     try:
@@ -839,12 +894,11 @@ def get_profile_photo(name):
 
 @app.route('/api/profiles/<path:name>', methods=['PUT'])
 def update_profile(name):
-    """Update profile ratings/notes. Syncs notes to Notion as comment."""
+    """Update profile notes. Syncs notes to Notion."""
     data = request.get_json()
 
     allowed_fields = {
-        'rating_reliability', 'rating_content_quality',
-        'rating_communication', 'notes', 'instagram_handle',
+        'notes', 'instagram_handle',
         'display_name', 'email',
     }
     updates = {k: v for k, v in data.items() if k in allowed_fields}

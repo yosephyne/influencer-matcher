@@ -82,6 +82,17 @@ function showToast(message, type) {
     }, 3000);
 }
 
+// --- Collapsible Sections ---
+
+function toggleCollapsible(header) {
+    const section = header.parentElement;
+    const body = section.querySelector('.collapsible-body');
+    const arrow = header.querySelector('.collapsible-arrow');
+    const isOpen = body.style.display !== 'none';
+    body.style.display = isOpen ? 'none' : 'block';
+    arrow.classList.toggle('open', !isOpen);
+}
+
 // --- Main Navigation ---
 
 function switchMainTab(tabName) {
@@ -281,12 +292,11 @@ function sortProfiles(field) {
     renderProfileList(allProfiles);
 }
 
-function getEffectiveRating(p, field) {
-    // Manual rating (if > 0) takes priority over auto
-    const autoField = 'auto_' + field;
-    const manual = p[field] || 0;
-    const auto = p[autoField] || 0;
-    return manual > 0 ? manual : auto;
+function formatFollowerCount(n) {
+    if (!n || n === 0) return '-';
+    if (n >= 1000000) return (n / 1000000).toFixed(1).replace('.0', '') + 'M';
+    if (n >= 1000) return Math.round(n / 1000) + 'k';
+    return String(n);
 }
 
 function renderProfileList(profiles) {
@@ -302,9 +312,9 @@ function renderProfileList(profiles) {
         if (profileSortField === 'name') {
             valA = (a.display_name || a.name || '').toLowerCase();
             valB = (b.display_name || b.name || '').toLowerCase();
-        } else if (profileSortField === 'rating') {
-            valA = (getEffectiveRating(a, 'rating_reliability') + getEffectiveRating(a, 'rating_content_quality') + getEffectiveRating(a, 'rating_communication')) / 3;
-            valB = (getEffectiveRating(b, 'rating_reliability') + getEffectiveRating(b, 'rating_content_quality') + getEffectiveRating(b, 'rating_communication')) / 3;
+        } else if (profileSortField === 'follower') {
+            valA = a.notion_follower || 0;
+            valB = b.notion_follower || 0;
         } else if (profileSortField === 'products') {
             valA = a.product_count || 0;
             valB = b.product_count || 0;
@@ -315,16 +325,13 @@ function renderProfileList(profiles) {
     });
 
     container.innerHTML = sorted.map(p => {
-        const avgRating = Math.round(
-            (getEffectiveRating(p, 'rating_reliability') + getEffectiveRating(p, 'rating_content_quality') + getEffectiveRating(p, 'rating_communication')) / 3
-        );
-        const stars = avgRating > 0 ? '&#9733;'.repeat(avgRating) + '&#9734;'.repeat(5 - avgRating) : '&#9734;&#9734;&#9734;&#9734;&#9734;';
+        const followerStr = formatFollowerCount(p.notion_follower);
         const isActive = p.name === currentProfileName ? ' active' : '';
         const tagDots = (p.tags || []).slice(0, 3).map(t => `<span class="tag-dot" title="${t}" style="background:${tagColor(t)}"></span>`).join('');
         return `
             <div class="profile-row${isActive}" onclick="openProfile('${p.name.replace(/'/g, "\\'")}')">
                 <div class="profile-row-name">${p.display_name || p.name}${tagDots ? '<span class="tag-dots">' + tagDots + '</span>' : ''}</div>
-                <div class="profile-row-stars">${stars}</div>
+                <div class="profile-row-followers">${followerStr}</div>
                 <div class="profile-row-count">${p.product_count || 0}</div>
             </div>
         `;
@@ -345,6 +352,14 @@ async function openProfile(name) {
 
     placeholder.style.display = 'none';
     detailSection.style.display = 'block';
+
+    // Reset all collapsible sections to collapsed state
+    detailSection.querySelectorAll('.collapsible-section').forEach(s => {
+        const body = s.querySelector('.collapsible-body');
+        const arrow = s.querySelector('.collapsible-arrow');
+        if (body) body.style.display = 'none';
+        if (arrow) arrow.classList.remove('open');
+    });
 
     // On mobile: scroll to detail section
     if (window.innerWidth <= 768) {
@@ -382,15 +397,6 @@ async function openProfile(name) {
             avatarDiv.style.backgroundColor = 'transparent';
         } else if (profile.notion_icon_url) {
             avatarDiv.innerHTML = `<img src="${profile.notion_icon_url}" alt="${initials}">`;
-            avatarDiv.style.backgroundColor = 'transparent';
-            avatarDiv.querySelector('img').onerror = function() {
-                if (igHandle) {
-                    this.onerror = function() { fallbackInitials(); };
-                    this.src = `https://unavatar.io/instagram/${igHandle}`;
-                } else { fallbackInitials(); }
-            };
-        } else if (igHandle) {
-            avatarDiv.innerHTML = `<img src="https://unavatar.io/instagram/${igHandle}" alt="${initials}">`;
             avatarDiv.style.backgroundColor = 'transparent';
             avatarDiv.querySelector('img').onerror = function() { fallbackInitials(); };
         } else {
@@ -432,45 +438,108 @@ async function openProfile(name) {
         // Tags
         renderProfileTags(profile);
 
-        // Render smart stars (auto vs manual)
-        renderSmartStars('stars-reliability', 'badge-reliability', 'reset-reliability',
-            profile.rating_reliability || 0, profile.auto_rating_reliability || 0, 'rating_reliability');
-        renderSmartStars('stars-content', 'badge-content', 'reset-content',
-            profile.rating_content_quality || 0, profile.auto_rating_content_quality || 0, 'rating_content_quality');
-        renderSmartStars('stars-communication', 'badge-communication', 'reset-communication',
-            profile.rating_communication || 0, profile.auto_rating_communication || 0, 'rating_communication');
+        // Follower count in header
+        const followerEl = document.getElementById('profileFollowerCount');
+        if (profile.notion_follower && profile.notion_follower > 0) {
+            followerEl.textContent = Number(profile.notion_follower).toLocaleString('de-DE') + ' Follower';
+            followerEl.style.display = '';
+        } else {
+            followerEl.style.display = 'none';
+        }
+
+        // Status badges & Prio Alice
+        const statusSection = document.getElementById('profileStatusSection');
+        const statusBadges = document.getElementById('profileStatusBadges');
+        const prioBadge = document.getElementById('profilePrioBadge');
+
+        const hasStatus = profile.notion_status && profile.notion_status.trim();
+        const hasPrio = profile.prio_alice && profile.prio_alice.trim();
+
+        if (hasStatus || hasPrio) {
+            statusSection.style.display = '';
+            // Status badges (comma-separated multi_select)
+            if (hasStatus) {
+                statusBadges.innerHTML = profile.notion_status.split(',').map(s => {
+                    const status = s.trim();
+                    const cssClass = 'status-badge status-badge-' + status.toLowerCase().replace(/\s+/g, '-');
+                    return `<span class="${cssClass}">${status}</span>`;
+                }).join('');
+            } else {
+                statusBadges.innerHTML = '';
+            }
+            // Prio Alice badge
+            if (hasPrio) {
+                const prio = profile.prio_alice.trim();
+                const prioClass = 'prio-badge prio-' + prio.toLowerCase().replace(/\s+/g, '-');
+                prioBadge.className = prioClass;
+                prioBadge.textContent = 'Prio: ' + prio;
+                prioBadge.style.display = '';
+            } else {
+                prioBadge.style.display = 'none';
+            }
+        } else {
+            statusSection.style.display = 'none';
+        }
+
+        // Website Links
+        const websiteDiv = document.getElementById('profileWebsiteLinks');
+        const links = [];
+        if (profile.website_link_1) links.push(profile.website_link_1);
+        if (profile.website_link_2) links.push(profile.website_link_2);
+        if (links.length > 0) {
+            websiteDiv.style.display = '';
+            websiteDiv.innerHTML = '<h3>Website-Links</h3>' + links.map(url => {
+                let domain = '';
+                try { domain = new URL(url).hostname.replace('www.', ''); } catch(e) { domain = url; }
+                return `<a href="${url}" target="_blank" class="website-link-card">
+                    <img src="https://www.google.com/s2/favicons?domain=${domain}&sz=32" alt="" class="website-favicon">
+                    <span>${domain}</span>
+                </a>`;
+            }).join('');
+        } else {
+            websiteDiv.style.display = 'none';
+        }
+
+        // CS Hinweis (Cornerstone)
+        const csDiv = document.getElementById('profileCSHinweis');
+        if (profile.cs_hinweis && profile.cs_hinweis.trim()) {
+            csDiv.style.display = '';
+            csDiv.innerHTML = `<strong>CS Hinweis</strong><p>${profile.cs_hinweis}</p>`;
+        } else {
+            csDiv.style.display = 'none';
+        }
 
         // Notes
         document.getElementById('profileNotes').value = profile.notes || '';
 
-        // Products
+        // Products (with links to goodmood-food.de)
         const productsDiv = document.getElementById('profileProducts');
+        const productsListDiv = document.getElementById('profileProductsList');
         if (profile.products && profile.products.length > 0) {
-            productsDiv.innerHTML = `
-                <h3>Produkt-Historie</h3>
+            productsDiv.style.display = 'block';
+            productsListDiv.innerHTML = `
                 <ul class="profile-product-list">
-                    ${profile.products.map(p => `<li>${p}</li>`).join('')}
+                    ${profile.products.map(p => {
+                        if (typeof p === 'object' && p.url) {
+                            return `<li><a href="${p.url}" target="_blank" class="product-link">${p.name}</a></li>`;
+                        }
+                        const name = typeof p === 'object' ? p.name : p;
+                        return `<li>${name}</li>`;
+                    }).join('')}
                 </ul>
             `;
         } else {
-            productsDiv.innerHTML = '<p class="no-data">Keine Produkt-Historie</p>';
+            productsDiv.style.display = 'none';
         }
 
-        // Notion data
+        // Notion data (collab history + email draft)
         const notionDiv = document.getElementById('profileNotionData');
         const emailDraftDiv = document.getElementById('profileEmailDraft');
         const collabDiv = document.getElementById('profileCollabHistory');
 
         if (profile.notion_page_id) {
-            notionDiv.style.display = 'block';
-            document.getElementById('profileNotionStatus').textContent = profile.notion_status || '-';
-            document.getElementById('profileNotionStatus').className =
-                'notion-badge notion-status-' + (profile.notion_status || '').toLowerCase().replace(/\s+/g, '-');
-            document.getElementById('profileNotionFollower').textContent =
-                profile.notion_follower ? Number(profile.notion_follower).toLocaleString('de-DE') + ' Follower' : '';
-            document.getElementById('profileNotionProdukt').textContent = profile.notion_produkt || '';
+            notionDiv.style.display = 'none'; // No separate Notion section needed
 
-            // Auto-loaded collab history (no button needed)
             if (profile.collab_history) {
                 collabDiv.style.display = 'block';
                 document.getElementById('collabHistoryContent').innerHTML =
@@ -479,7 +548,6 @@ async function openProfile(name) {
                 collabDiv.style.display = 'none';
             }
 
-            // Auto-loaded email draft (no button needed)
             if (profile.email_draft) {
                 emailDraftDiv.style.display = 'block';
                 document.getElementById('emailDraftContent').innerHTML =
@@ -489,7 +557,7 @@ async function openProfile(name) {
             }
         } else if (notionConnected) {
             notionDiv.style.display = 'block';
-            notionDiv.innerHTML = '<h3>Notion-Daten</h3><p class="no-data">Kein Notion-Eintrag verknuepft. ' +
+            notionDiv.innerHTML = '<p class="no-data">Kein Notion-Eintrag verknuepft. ' +
                 '<a href="#" onclick="switchMainTab(\'settings\'); return false;" style="color: var(--primary-light);">In Einstellungen synchronisieren</a></p>';
             collabDiv.style.display = 'none';
             emailDraftDiv.style.display = 'none';
@@ -510,58 +578,6 @@ async function openProfile(name) {
     }
 }
 
-function renderStars(containerId, currentValue, field) {
-    const container = document.getElementById(containerId);
-    container.innerHTML = '';
-    for (let i = 1; i <= 5; i++) {
-        const star = document.createElement('span');
-        star.className = 'star' + (i <= currentValue ? ' active' : '');
-        star.innerHTML = '&#9733;';
-        star.addEventListener('click', () => setRating(field, i));
-        container.appendChild(star);
-    }
-}
-
-function renderSmartStars(starsId, badgeId, resetId, manualValue, autoValue, field) {
-    const isManual = manualValue > 0;
-    const displayValue = isManual ? manualValue : autoValue;
-
-    renderStars(starsId, displayValue, field);
-
-    const badge = document.getElementById(badgeId);
-    if (badge) {
-        if (isManual) {
-            badge.textContent = 'manuell';
-            badge.className = 'rating-badge rating-badge-manual';
-        } else if (autoValue > 0) {
-            badge.textContent = 'auto';
-            badge.className = 'rating-badge rating-badge-auto';
-        } else {
-            badge.textContent = '';
-            badge.className = 'rating-badge';
-        }
-    }
-
-    const resetBtn = document.getElementById(resetId);
-    if (resetBtn) {
-        resetBtn.style.display = isManual ? '' : 'none';
-    }
-}
-
-async function resetRating(field) {
-    if (!currentProfileName) return;
-    try {
-        await fetch(`/api/profiles/${encodeURIComponent(currentProfileName)}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ [field]: 0 })
-        });
-        openProfile(currentProfileName);
-        loadProfiles();
-    } catch (error) {
-        showToast('Fehler beim Zuruecksetzen', 'error');
-    }
-}
 
 // --- Tags ---
 
@@ -637,27 +653,6 @@ async function removeTag(tag) {
     }
 }
 
-async function setRating(field, value) {
-    if (!currentProfileName) return;
-
-    try {
-        await fetch(`/api/profiles/${encodeURIComponent(currentProfileName)}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ [field]: value })
-        });
-
-        const containerMap = {
-            'rating_reliability': 'stars-reliability',
-            'rating_content_quality': 'stars-content',
-            'rating_communication': 'stars-communication'
-        };
-        renderStars(containerMap[field], value, field);
-        loadProfiles();
-    } catch (error) {
-        showToast('Bewertung konnte nicht gespeichert werden', 'error');
-    }
-}
 
 async function saveProfileNotes() {
     if (!currentProfileName) return;

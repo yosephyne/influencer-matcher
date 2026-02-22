@@ -13,6 +13,7 @@ __pycache__/
 # Data files (contain sensitive information)
 data/uploads/*
 data/exports/*
+data/photos/*
 
 # But keep the directory structure
 !data/uploads/.gitkeep

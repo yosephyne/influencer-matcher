@@ -67,7 +67,7 @@
                         <!-- Sortable column headers -->
                         <div class="list-header">
                             <span class="list-header-col list-header-name sort-col active" data-sort="name" onclick="sortProfiles('name')">Name</span>
-                            <span class="list-header-col list-header-stars sort-col" data-sort="rating" onclick="sortProfiles('rating')">Bewertung</span>
+                            <span class="list-header-col list-header-followers sort-col" data-sort="follower" onclick="sortProfiles('follower')">Follower</span>
                             <span class="list-header-col list-header-count sort-col" data-sort="products" onclick="sortProfiles('products')">Produkte</span>
                         </div>
 
@@ -96,6 +96,7 @@
                                 <h2 id="profileDetailName"></h2>
                                 <a id="profileInstagram" href="#" target="_blank" class="profile-instagram" style="display: none;"></a>
                                 <a id="profileEmail" href="#" class="profile-email" style="display: none;"></a>
+                                <span class="profile-follower-count" id="profileFollowerCount" style="display: none;"></span>
                                 <span class="profile-product-count" id="profileDetailCount"></span>
                             </div>
                         </div>
@@ -110,26 +111,17 @@
                             </div>
                         </div>
 
-                        <div class="rating-section">
-                            <div class="rating-row">
-                                <label>Produkt-Erfahrung</label>
-                                <div class="star-rating" data-field="rating_reliability" id="stars-reliability"></div>
-                                <span class="rating-badge" id="badge-reliability"></span>
-                                <button class="btn-reset-rating" id="reset-reliability" onclick="resetRating('rating_reliability')" title="Auf Auto zuruecksetzen" style="display:none;">&#x21ba;</button>
-                            </div>
-                            <div class="rating-row">
-                                <label>Reichweite</label>
-                                <div class="star-rating" data-field="rating_content_quality" id="stars-content"></div>
-                                <span class="rating-badge" id="badge-content"></span>
-                                <button class="btn-reset-rating" id="reset-content" onclick="resetRating('rating_content_quality')" title="Auf Auto zuruecksetzen" style="display:none;">&#x21ba;</button>
-                            </div>
-                            <div class="rating-row">
-                                <label>Kooperations-Status</label>
-                                <div class="star-rating" data-field="rating_communication" id="stars-communication"></div>
-                                <span class="rating-badge" id="badge-communication"></span>
-                                <button class="btn-reset-rating" id="reset-communication" onclick="resetRating('rating_communication')" title="Auf Auto zuruecksetzen" style="display:none;">&#x21ba;</button>
-                            </div>
+                        <!-- Status & Prio Badges -->
+                        <div id="profileStatusSection" class="profile-status-section" style="display: none;">
+                            <div id="profileStatusBadges" class="profile-status-badges"></div>
+                            <span id="profilePrioBadge" class="prio-badge" style="display: none;"></span>
                         </div>
+
+                        <!-- Website Links -->
+                        <div id="profileWebsiteLinks" class="profile-website-links" style="display: none;"></div>
+
+                        <!-- CS Hinweis -->
+                        <div id="profileCSHinweis" class="cs-hinweis-box" style="display: none;"></div>
 
                         <div class="form-group">
                             <label>Notizen</label>
@@ -138,7 +130,16 @@
                             <span id="notionSyncHint" class="notion-sync-hint" style="display:none;"></span>
                         </div>
 
-                        <div id="profileProducts" class="profile-products"></div>
+                        <!-- Produkt-Historie (collapsible) -->
+                        <div id="profileProducts" class="profile-products collapsible-section" style="display: none;">
+                            <div class="collapsible-header" onclick="toggleCollapsible(this)">
+                                <span class="collapsible-arrow">&#9654;</span>
+                                <h3>Produkt-Historie</h3>
+                            </div>
+                            <div class="collapsible-body" style="display: none;">
+                                <div id="profileProductsList"></div>
+                            </div>
+                        </div>
 
                         <!-- KI-Analyse -->
                         <div id="profileAIAnalysis" class="profile-ai-section">
@@ -146,26 +147,29 @@
                             <div id="aiAnalysisResult" style="display: none;"></div>
                         </div>
 
-                        <!-- Notion Data (shown when available) -->
-                        <div id="profileNotionData" style="display: none;">
-                            <h3>Notion-Daten</h3>
-                            <div class="notion-meta">
-                                <span class="notion-badge" id="profileNotionStatus"></span>
-                                <span class="notion-follower" id="profileNotionFollower"></span>
-                                <span class="notion-produkt" id="profileNotionProdukt"></span>
+                        <!-- Notion Data (hidden container for backwards compat) -->
+                        <div id="profileNotionData" style="display: none;"></div>
+
+                        <!-- Collab History (collapsible) -->
+                        <div id="profileCollabHistory" class="collapsible-section" style="display: none;">
+                            <div class="collapsible-header" onclick="toggleCollapsible(this)">
+                                <span class="collapsible-arrow">&#9654;</span>
+                                <h3>Kollaborations-Historie</h3>
+                            </div>
+                            <div class="collapsible-body" style="display: none;">
+                                <div id="collabHistoryContent" class="collab-history-box"></div>
                             </div>
                         </div>
 
-                        <!-- Collab History (auto-loaded from profile GET) -->
-                        <div id="profileCollabHistory" style="display: none;">
-                            <h3>Kollaborations-Historie</h3>
-                            <div id="collabHistoryContent" class="collab-history-box"></div>
-                        </div>
-
-                        <!-- Email Draft (auto-loaded from profile GET) -->
-                        <div id="profileEmailDraft" style="display: none;">
-                            <h3>E-Mail-Entwurf</h3>
-                            <div id="emailDraftContent" class="email-draft-box"></div>
+                        <!-- Email Draft (collapsible) -->
+                        <div id="profileEmailDraft" class="collapsible-section" style="display: none;">
+                            <div class="collapsible-header" onclick="toggleCollapsible(this)">
+                                <span class="collapsible-arrow">&#9654;</span>
+                                <h3>E-Mail-Entwurf</h3>
+                            </div>
+                            <div class="collapsible-body" style="display: none;">
+                                <div id="emailDraftContent" class="email-draft-box"></div>
+                            </div>
                         </div>
                     </section>
                 </div>
@@ -410,6 +414,6 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <script src="{{ url_for('static', filename='js/app2.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/app2.js') }}?v={{ range(1000,9999) | random }}"></script>
 </body>
 </html>

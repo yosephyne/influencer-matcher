@@ -206,7 +206,7 @@ class NotionService:
             'instagram': self._get_rich_text(props.get('Instagram', {})),
             'produkt': self._get_rich_text(props.get('Produkt', {})),
             'rolle': self._get_rich_text(props.get('Rolle', {})),
-            'status': self._get_select(props.get('Status', {})),
+            'status': self._get_multi_select(props.get('Status', {})),
             'prioritaet': self._get_select(props.get('Priorität', {})),
             'prio_alice': self._get_select(props.get('PRIO Alice', {})),
             'email_version': self._get_select(props.get('Email-Version', {})),
@@ -216,6 +216,9 @@ class NotionService:
             'hinweis': self._get_rich_text(props.get('Hinweis', {})),
             'extra_info': self._get_rich_text(props.get('Extra Info', {})),
             'matcher_notiz': self._get_rich_text(props.get('Matcher-Notiz', {})),
+            'website_link_1': self._get_url(props.get('Website Link 1', {})),
+            'website_link_2': self._get_url(props.get('Website-Link 2', {})),
+            'cs_hinweis': self._get_rich_text(props.get('CS Hinweis', {})),
         }
 
         # Try to extract email address from various properties
@@ -248,6 +251,13 @@ class NotionService:
     def _get_select(self, prop):
         sel = prop.get('select')
         return sel.get('name', '') if sel else ''
+
+    def _get_multi_select(self, prop):
+        items = prop.get('multi_select', [])
+        return ', '.join(item.get('name', '') for item in items) if items else ''
+
+    def _get_url(self, prop):
+        return prop.get('url', '') or ''
 
     def _get_checkbox(self, prop):
         return prop.get('checkbox', False)

@@ -79,6 +79,10 @@ class Database:
             ("influencer_profiles", "notion_kontakt", "TEXT DEFAULT ''"),
             ("influencer_profiles", "notion_rolle", "TEXT DEFAULT ''"),
             ("influencer_profiles", "notion_icon_url", "TEXT DEFAULT ''"),
+            ("influencer_profiles", "prio_alice", "TEXT DEFAULT ''"),
+            ("influencer_profiles", "website_link_1", "TEXT DEFAULT ''"),
+            ("influencer_profiles", "website_link_2", "TEXT DEFAULT ''"),
+            ("influencer_profiles", "cs_hinweis", "TEXT DEFAULT ''"),
         ]
         for table, col, col_type in migration_columns:
             try:
@@ -225,25 +229,33 @@ class Database:
     def update_notion_data(self, name, notion_page_id, notion_status='',
                            notion_produkt='', notion_follower=0,
                            notion_kontakt='', notion_rolle='', email='',
-                           icon_url=''):
+                           icon_url='', instagram_handle='',
+                           prio_alice='', website_link_1='',
+                           website_link_2='', cs_hinweis=''):
         """Update Notion-specific fields for a profile."""
         conn = self._get_connection()
         conn.execute("""
             UPDATE influencer_profiles
             SET notion_page_id = ?, notion_status = ?, notion_produkt = ?,
                 notion_follower = ?, notion_kontakt = ?, notion_rolle = ?,
-                notion_icon_url = ?,
+                notion_icon_url = ?, prio_alice = ?,
+                website_link_1 = ?, website_link_2 = ?, cs_hinweis = ?,
                 notion_synced_at = datetime('now'),
                 updated_at = datetime('now')
             WHERE name = ?
         """, (notion_page_id, notion_status, notion_produkt, notion_follower,
-              notion_kontakt, notion_rolle, icon_url, name))
-        # Only overwrite email if Notion provides one
+              notion_kontakt, notion_rolle, icon_url, prio_alice,
+              website_link_1, website_link_2, cs_hinweis, name))
         if email:
             conn.execute("""
                 UPDATE influencer_profiles SET email = ?
                 WHERE name = ? AND (email IS NULL OR email = '')
             """, (email, name))
+        if instagram_handle:
+            conn.execute("""
+                UPDATE influencer_profiles SET instagram_handle = ?
+                WHERE name = ?
+            """, (instagram_handle, name))
         conn.commit()
         conn.close()
 

@@ -19,5 +19,8 @@ cryptography>=42.0.0
 # HTTP requests (Notion API, OpenRouter)
 requests>=2.31.0
 
+# Instagram profile picture downloads
+instaloader>=4.15
+
 # Environment config
 python-dotenv>=1.0.0

@@ -611,7 +611,7 @@ textarea.input-field {
     flex: 1;
 }
 
-.list-header-stars {
+.list-header-followers {
     min-width: 70px;
     text-align: center;
 }
@@ -680,12 +680,12 @@ textarea.input-field {
     text-overflow: ellipsis;
 }
 
-.profile-row-stars {
-    color: var(--accent-gold);
+.profile-row-followers {
+    color: var(--text-muted);
     font-size: 0.8rem;
-    letter-spacing: 1px;
     min-width: 70px;
     text-align: center;
+    font-weight: 600;
 }
 
 .profile-row-count {
@@ -784,42 +784,142 @@ textarea.input-field {
     font-size: 0.9rem;
 }
 
-/* Star Rating */
-.rating-section {
-    margin-bottom: 2rem;
-}
+/* ===== Status & Prio Badges ===== */
 
-.rating-row {
+.profile-status-section {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 1rem;
-    margin-bottom: 0.75rem;
+    gap: 0.5rem;
+    margin-bottom: 1.25rem;
 }
 
-.rating-row label {
-    min-width: 160px;
+.profile-status-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+
+.status-badge {
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    background: rgba(138, 77, 166, 0.15);
+    color: var(--primary-light);
+}
+
+.status-badge-tm-eingebaut { background: rgba(16, 185, 129, 0.2); color: var(--success); }
+.status-badge-alice-approved { background: rgba(242, 145, 132, 0.2); color: var(--accent-coral); }
+.status-badge-lisa-approved { background: rgba(138, 77, 166, 0.2); color: var(--primary-light); }
+.status-badge-gesendet { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }
+.status-badge-zugesagt { background: rgba(16, 185, 129, 0.2); color: var(--success); }
+.status-badge-abgesagt { background: rgba(239, 68, 68, 0.2); color: var(--danger); }
+.status-badge-entwurf { background: rgba(239, 193, 95, 0.2); color: var(--warning); }
+.status-badge-ready-to-send { background: rgba(59, 130, 246, 0.15); color: #93c5fd; }
+.status-badge-antwort-erhalten { background: rgba(16, 185, 129, 0.15); color: #6ee7b7; }
+.status-badge-kein-entwurf { background: rgba(255, 255, 255, 0.05); color: var(--text-muted); }
+
+.prio-badge {
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.prio-hoch { background: rgba(16, 185, 129, 0.2); color: var(--success); }
+.prio-mittel { background: rgba(239, 193, 95, 0.2); color: var(--warning); }
+.prio-niedrig { background: rgba(196, 138, 93, 0.2); color: var(--secondary); }
+.prio-team-tipp { background: rgba(138, 77, 166, 0.2); color: var(--primary-light); }
+.prio-nicht-kontaktieren { background: rgba(239, 68, 68, 0.2); color: var(--danger); }
+
+/* ===== Profile Follower Count ===== */
+
+.profile-follower-count {
+    color: var(--text-muted);
+    font-size: 0.85rem;
     font-weight: 600;
 }
 
-.star-rating {
-    display: flex;
-    gap: 4px;
+/* ===== Website Links ===== */
+
+.profile-website-links {
+    margin-bottom: 1.25rem;
 }
 
-.star {
-    font-size: 1.5rem;
-    color: var(--border);
-    cursor: pointer;
-    transition: color 0.15s, transform 0.1s;
-    user-select: none;
+.profile-website-links h3 {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    margin-bottom: 0.5rem;
 }
 
-.star:hover {
-    transform: scale(1.2);
+.website-link-card {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.75rem;
+    border-radius: 8px;
+    background: rgba(138, 77, 166, 0.08);
+    border: 1px solid rgba(138, 77, 166, 0.15);
+    color: var(--primary-light);
+    text-decoration: none;
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-right: 0.5rem;
+    margin-bottom: 0.4rem;
+    transition: all 0.15s;
 }
 
-.star.active {
-    color: var(--accent-gold);
+.website-link-card:hover {
+    background: rgba(138, 77, 166, 0.15);
+    border-color: var(--primary);
+    color: var(--text);
+}
+
+.website-favicon {
+    width: 16px;
+    height: 16px;
+    border-radius: 2px;
+}
+
+/* ===== CS Hinweis Box ===== */
+
+.cs-hinweis-box {
+    margin-bottom: 1.25rem;
+    padding: 1rem;
+    border-radius: 8px;
+    background: rgba(242, 145, 132, 0.08);
+    border-left: 4px solid var(--accent-coral);
+}
+
+.cs-hinweis-box strong {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--accent-coral);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 0.4rem;
+}
+
+.cs-hinweis-box p {
+    color: var(--text);
+    font-size: 0.9rem;
+    line-height: 1.6;
+    margin: 0;
+}
+
+/* ===== Product Links ===== */
+
+.product-link {
+    color: var(--primary-light);
+    text-decoration: none;
+    font-weight: 600;
+    transition: color 0.15s;
+}
+
+.product-link:hover {
+    color: var(--accent-coral);
+    text-decoration: underline;
 }
 
 .profile-notes {
@@ -1257,8 +1357,8 @@ footer {
         padding: 0.4rem 0.75rem;
     }
 
-    .list-header-stars,
-    .profile-row-stars {
+    .list-header-followers,
+    .profile-row-followers {
         min-width: 55px;
     }
 
@@ -1288,15 +1388,26 @@ footer {
         font-size: 1.1rem;
     }
 
-    /* Ratings */
-    .rating-row {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 0.25rem;
+    /* Status badges & prio */
+    .profile-status-section {
+        gap: 0.35rem;
     }
 
-    .rating-row label {
-        min-width: auto;
+    .status-badge,
+    .prio-badge {
+        font-size: 0.7rem;
+        padding: 0.2rem 0.5rem;
+    }
+
+    /* Website links */
+    .website-link-card {
+        font-size: 0.8rem;
+        padding: 0.35rem 0.6rem;
+    }
+
+    /* CS Hinweis */
+    .cs-hinweis-box {
+        padding: 0.75rem;
     }
 
     /* Notion */
@@ -1467,10 +1578,53 @@ footer {
 }
 
 
+/* Collapsible Sections */
+
+.collapsible-section {
+    margin-top: 1rem;
+}
+
+.collapsible-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    padding: 0.6rem 0.8rem;
+    border-radius: 8px;
+    background: rgba(138, 77, 166, 0.06);
+    transition: background 0.2s;
+    user-select: none;
+}
+
+.collapsible-header:hover {
+    background: rgba(138, 77, 166, 0.12);
+}
+
+.collapsible-header h3 {
+    margin: 0;
+    font-size: 0.95rem;
+    color: var(--text-secondary);
+}
+
+.collapsible-arrow {
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    transition: transform 0.2s;
+    display: inline-block;
+}
+
+.collapsible-arrow.open {
+    transform: rotate(90deg);
+}
+
+.collapsible-body {
+    padding-top: 0.8rem;
+}
+
 /* Collab History */
 
 .collab-history-box {
-    margin-top: 1rem;
+    margin-top: 0;
 }
 
 .collab-history-content {
@@ -1498,7 +1652,7 @@ footer {
 /* Email Draft */
 
 .email-draft-box {
-    margin-top: 1rem;
+    margin-top: 0;
 }
 
 .email-draft-content {
@@ -1723,45 +1877,6 @@ footer {
     font-size: 0.8rem !important;
 }
 
-/* ===== Smart Rating Badges ===== */
-
-.rating-badge {
-    font-size: 0.65rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    padding: 0.15rem 0.4rem;
-    border-radius: 4px;
-    margin-left: 0.5rem;
-}
-
-.rating-badge-auto {
-    background: rgba(16, 185, 129, 0.15);
-    color: var(--success);
-}
-
-.rating-badge-manual {
-    background: rgba(138, 77, 166, 0.15);
-    color: var(--primary-light);
-}
-
-.btn-reset-rating {
-    background: none;
-    border: 1px solid var(--border);
-    color: var(--text-muted);
-    cursor: pointer;
-    font-size: 0.9rem;
-    padding: 0.1rem 0.4rem;
-    border-radius: 4px;
-    margin-left: 0.25rem;
-    transition: all 0.15s;
-    line-height: 1;
-}
-
-.btn-reset-rating:hover {
-    color: var(--accent-coral);
-    border-color: var(--accent-coral);
-}
 
 /* ===== Notion Sync Hint ===== */
 
